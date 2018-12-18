@@ -283,14 +283,6 @@ class LDDMM:
     # update learning rate for gradient descent
     def updateGDLearningRate(self):
         flag = False
-        if self.params['savebestv']:
-            if self.EAll[-1] < self.bestE:
-                self.bestE = self.EAll[-1]
-                # TODO: this may be too slow to keep doing on cpu. possibly clone on gpu and eat memory
-                self.best['vt0'] = [x.cpu() for x in self.vt0]
-                self.best['vt1'] = [x.cpu() for x in self.vt1]
-                self.best['vt2'] = [x.cpu() for x in self.vt2]
-        
         if len(self.EAll) > 1:
             if self.params['optimizer'] == 'gdr':
                 # energy increased
@@ -314,6 +306,14 @@ class LDDMM:
                     self.GDBeta *= 1.04
                 elif self.EAll[-1] < self.EAll[-2]:
                     self.climbcount = 0
+        
+        if self.params['savebestv']:
+            if self.EAll[-1] < self.bestE:
+                self.bestE = self.EAll[-1]
+                # TODO: this may be too slow to keep doing on cpu. possibly clone on gpu and eat memory
+                self.best['vt0'] = [x.cpu() for x in self.vt0]
+                self.best['vt1'] = [x.cpu() for x in self.vt1]
+                self.best['vt2'] = [x.cpu() for x in self.vt2]
         
         return flag
     

@@ -9,7 +9,7 @@ sys.path.insert(0,'/cis/home/leebc/Software/')
 import nibabel as nib
 
 class LDDMM:
-    def __init__(self,template=None,target=None,outdir='./',gpu_number=0,a=5.0,p=2,niter=100,epsilon=5e-3,epsilonL=1.0e-7,epsilonT=2.0e-5,sigma=2.0,sigmaR=1.0,nt=5,doaffine=0):
+    def __init__(self,template=None,target=None,outdir='./',gpu_number=0,a=5.0,p=2,niter=100,epsilon=5e-3,epsilonL=1.0e-7,epsilonT=2.0e-5,sigma=2.0,sigmaR=1.0,nt=5,doaffine=0,optimizer='gd',maxclimbcount=3,savebestv=False):
         self.params = {}
         self.params['gpu_number'] = gpu_number
         self.params['a'] = float(a)
@@ -25,6 +25,13 @@ class LDDMM:
         self.params['target'] = target
         self.params['outdir'] = outdir
         self.params['doaffine'] = doaffine
+        self.params['optimizer'] = optimizer
+        self.params['maxclimbcount'] = maxclimbcount
+        self.params['savebestv'] = savebestv
+        optimizer_dict = {}
+        optimizer_dict['gd'] = 'gradient descent'
+        optimizer_dict['gdr'] = 'gradient descent with reducing epsilon'
+        optimizer_dict['gdw'] = 'gradient descent with delayed reducing epsilon'
         print('\nCurrent parameters:')
         print('>    a            = ' + str(a) + ' (smoothing kernel, a*(pixel_size))')
         print('>    p            = ' + str(p) + ' (smoothing kernel power, p*2)')
@@ -38,6 +45,12 @@ class LDDMM:
         print('>    doaffine     = ' + str(doaffine) + ' (interleave affine registration: 0 = no, 1 = yes)')
         print('>    gpu_number   = ' + str(gpu_number) + ' (index of CUDA_VISIBLE_DEVICES to use)')
         print('>    outdir       = ' + str(outdir) + ' (output directory name)')
+        if optimizer in optimizer_dict:
+            print('>    optimizer    = ' + str(optimizer_dict[optimizer]) + ' (optimizer type)')
+        else:
+            print('WARNING: optimizer \'' + str(optimizer) + '\' not recognized. Setting to basic gradient descent with reducing step size.')
+            self.params['optimizer'] = 'gdr'
+        
         print('\n')
         if template is None:
             print('WARNING: template file name is not set. Use LDDMM.setParams(\'template\',filename).\n')
@@ -85,7 +98,7 @@ class LDDMM:
                 self.params['cuda'] = 'cuda:' + str(self.params['gpu_number'])
         
         number_list = ['a','p','niter','epsilon','sigma','sigmaR','nt','doaffine','epsilonL','epsilonT']
-        string_list = ['template','target','outdir']
+        string_list = ['template','target','outdir','optimizer']
         for i in range(len(number_list)):
             if not isinstance(self.params[number_list[i]], (int, float)):
                 flag = -1
@@ -95,6 +108,10 @@ class LDDMM:
             if not isinstance(self.params[string_list[i]], str):
                 flag = -1
                 print('ERROR: ' + string_list[i] + ' must be a string.')
+        
+        # optimizer flags
+        if self.params['optimizer'] == 'gdw':
+            self.params['savebestv'] = True
         
         return flag
     
@@ -174,6 +191,12 @@ class LDDMM:
         # affine parameters
         self.affineA = torch.tensor(np.eye(4)).float().to(device=self.params['cuda'])
         self.gradA = torch.tensor(np.zeros((4,4))).float().to(device=self.params['cuda'])
+        
+        # optimization multipliers
+        self.GDBeta = torch.tensor(1.0).float().to(device=self.params['cuda'])
+        self.climbcount = 0
+        if self.params['savebestv']:
+            self.best = {}
     
     # helper function for torch_gradient
     def _allocateGradientDivisors(self):
@@ -257,6 +280,44 @@ class LDDMM:
         EM = torch.sum((self.It[-1] - self.J)**2/(2.0*self.params['sigma']**2))*self.dx[0]*self.dx[1]*self.dx[2]
         return lambda1, EM
     
+    # update learning rate for gradient descent
+    def updateGDLearningRate(self):
+        flag = False
+        if self.params['savebestv']:
+            if self.EAll[-1] < self.bestE:
+                self.bestE = self.EAll[-1]
+                # TODO: this may be too slow to keep doing on cpu. possibly clone on gpu and eat memory
+                self.best['vt0'] = [x.cpu() for x in self.vt0]
+                self.best['vt1'] = [x.cpu() for x in self.vt1]
+                self.best['vt2'] = [x.cpu() for x in self.vt2]
+        
+        if len(self.EAll) > 1:
+            if self.params['optimizer'] == 'gdr':
+                # energy increased
+                if self.EAll[-1] > self.EAll[-2]:
+                    self.GDBeta *= 0.7
+            elif self.params['optimizer'] == 'gdw':
+                # energy increased
+                if self.EAll[-1] > self.EAll[-2]:
+                    self.climbcount += 1
+                    if self.climbcount > self.params['maxclimbcount']:
+                        flag = True
+                        self.GDBeta *= 0.7
+                        self.climbcount = 0
+                        self.vt0 = [x.to(device=self.params['cuda']) for x in self.best['vt0']]
+                        self.vt1 = [x.to(device=self.params['cuda']) for x in self.best['vt1']]
+                        self.vt2 = [x.to(device=self.params['cuda']) for x in self.best['vt2']]
+                        print('Reducing epsilon to ' + str((self.GDBeta*self.params['epsilon']).item()) + ' and resetting to last best point.')
+                # energy decreased
+                elif self.EAll[-1] < self.bestE:
+                    self.climbcount = 0
+                    self.GDBeta *= 1.04
+                elif self.EAll[-1] < self.EAll[-2]:
+                    self.climbcount = 0
+        
+        return flag
+    
+    
     # compute gradient of affine transformation
     # TODO: can i change the order of diffeo and A to remove one image gradient calculation?
     def calculateGradientA(self,affineA,lambda1):
@@ -320,9 +381,9 @@ class LDDMM:
     
     # update gradient
     def updateGradientVt(self,t,grad_list):
-        self.vt0[t] -= self.params['epsilon']*grad_list[0]
-        self.vt1[t] -= self.params['epsilon']*grad_list[1]
-        self.vt2[t] -= self.params['epsilon']*grad_list[2]
+        self.vt0[t] -= self.params['epsilon']*self.GDBeta*grad_list[0]
+        self.vt1[t] -= self.params['epsilon']*self.GDBeta*grad_list[1]
+        self.vt2[t] -= self.params['epsilon']*self.GDBeta*grad_list[2]
     
     # convenience function for calculating and updating gradients of Vt
     def calculateAndUpdateGradientsVt(self, lambda1):
@@ -354,17 +415,29 @@ class LDDMM:
             lambda1,EM = self.calculateMatchingEnergyMSE()
             # save variables
             E = ER+EM
-            self.EMAll.append(EM)        
-            self.ERAll.append(ER)        
+            self.EMAll.append(EM)
+            self.ERAll.append(ER)
             self.EAll.append(E)
+            if it == 0 and self.params['savebestv']:
+                self.bestE = E.clone()
+            
             # print function
+            if it > 0:
+                start_time = end_time
+            
             end_time = time.time()
             if it > 0:
-                print('iter: ' + str(it) + ', E = ' + str(E.item()) + ', ER = ' + str(ER.item()) + ', EM = ' + str(EM.item()) + ', time = ' + str(end_time-start_time) + '.')
+                print('iter: ' + str(it) + ', E = ' + str(E.item()) + ', ER = ' + str(ER.item()) + ', EM = ' + str(EM.item()) + ', ep = ' + str((self.GDBeta*self.params['epsilon']).item()) + ', time = ' + str(end_time-start_time) + '.')
             else:
-                print('iter: ' + str(it) + ', E = ' + str(E.item()) + ', ER = ' + str(ER.item()) + ', EM = ' + str(EM.item()) + '.')
+                print('iter: ' + str(it) + ', E = ' + str(E.item()) + ', ER = ' + str(ER.item()) + ', EM = ' + str(EM.item()) + ', ep = ' + str((self.GDBeta*self.params['epsilon']).item()) + '.')
             
-            start_time = time.time()
+            # update step sizes
+            updateflag = self.updateGDLearningRate()
+            # if asked for, recompute images
+            if updateflag:
+                _,_,_,_ = self.forwardDeformation()
+                lambda1,EM = self.calculateMatchingEnergyMSE()
+            
             # calculate affine gradient
             if self.params['doaffine'] == 1:
                 self.calculateGradientA(self.affineA,lambda1)

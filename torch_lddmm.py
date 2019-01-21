@@ -9,7 +9,7 @@ sys.path.insert(0,'/cis/home/leebc/Software/')
 import nibabel as nib
 
 class LDDMM:
-    def __init__(self,template=None,target=None,outdir='./',gpu_number=0,a=5.0,p=2,niter=100,epsilon=5e-3,epsilonL=1.0e-7,epsilonT=2.0e-5,sigma=2.0,sigmaR=1.0,nt=5,doaffine=0,checkaffinestep=1,optimizer='gd',maxclimbcount=3,savebestv=False,minenergychange = 0.000001,minbeta=1e-6,dtype='float'):
+    def __init__(self,template=None,target=None,outdir='./',gpu_number=0,a=5.0,p=2,niter=100,epsilon=5e-3,epsilonL=1.0e-7,epsilonT=2.0e-5,sigma=2.0,sigmaR=1.0,nt=5,doaffine=0,checkaffinestep=1,optimizer='gd',maxclimbcount=3,savebestv=False,minenergychange = 0.000001,minbeta=1e-6,dtype='float',im_norm_ms=0):
         self.params = {}
         self.params['gpu_number'] = gpu_number
         self.params['a'] = float(a)
@@ -31,6 +31,7 @@ class LDDMM:
         self.params['savebestv'] = savebestv
         self.params['minbeta'] = minbeta
         self.params['minenergychange'] = minenergychange
+        self.params['im_norm_ms'] = im_norm_ms
         dtype_dict = {}
         dtype_dict['float'] = 'torch.FloatTensor'
         dtype_dict['double'] = 'torch.DoubleTensor'
@@ -52,6 +53,7 @@ class LDDMM:
         print('>    nt              = ' + str(nt) + ' (number of time steps in velocity field)')
         print('>    doaffine        = ' + str(doaffine) + ' (interleave affine registration: 0 = no, 1 = yes)')
         print('>    checkaffinestep = ' + str(checkaffinestep) + ' (evaluate affine matching energy: 0 = no, 1 = yes)')
+        print('>    im_norm_ms      = ' + str(im_norm_ms) + ' (normalize image by mean and std: 0 = no, 1 = yes)')
         print('>    gpu_number      = ' + str(gpu_number) + ' (index of CUDA_VISIBLE_DEVICES to use)')
         print('>    dtype           = ' + str(dtype) + ' (bit depth, \'float\' or \'double\')')
         print('>    outdir          = ' + str(outdir) + ' (output directory name)')
@@ -89,7 +91,10 @@ class LDDMM:
             spacing = img_struct.header['pixdim'][1:4]
             size = img_struct.header['dim'][1:4]
             image = np.squeeze(img_struct.get_data().astype(np.float32))
-            image = torch.tensor((image - np.mean(image)) / np.std(image)).type(self.params['dtype']).to(device=self.params['cuda'])
+            if self.params['im_norm_ms'] == 1:
+                image = torch.tensor((image - np.mean(image)) / np.std(image)).type(self.params['dtype']).to(device=self.params['cuda'])
+            else:
+                image = torch.tensor(image).type(self.params['dtype']).to(device=self.params['cuda'])
             return (image, spacing, size)
         else:
             print('File format not supported.\n')
@@ -107,7 +112,7 @@ class LDDMM:
             else:
                 self.params['cuda'] = 'cuda:' + str(self.params['gpu_number'])
         
-        number_list = ['a','p','niter','epsilon','sigma','sigmaR','nt','doaffine','epsilonL','epsilonT']
+        number_list = ['a','p','niter','epsilon','sigma','sigmaR','nt','doaffine','epsilonL','epsilonT','im_norm_ms']
         string_list = ['template','target','outdir','optimizer']
         for i in range(len(number_list)):
             if not isinstance(self.params[number_list[i]], (int, float)):

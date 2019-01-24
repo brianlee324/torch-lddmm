@@ -296,13 +296,12 @@ class LDDMM:
                 self.vt1.append(torch.tensor(np.zeros((self.nx[0],self.nx[1],self.nx[2]))).type(self.params['dtype']).cuda())
                 self.vt2.append(torch.tensor(np.zeros((self.nx[0],self.nx[1],self.nx[2]))).type(self.params['dtype']).cuda())
             
-            self.It = [[],[]]
+            self.It = [ [None]*(self.params['nt']+1) for i in range(len(self.I)) ]
             for ii in range(len(self.I)):
                 # NOTE: you cannot use pointers / list multiplication for cuda tensors if you want actual copies
                 #self.It.append(torch.tensor(self.I[:,:,:]).type(self.params['dtype']).cuda())
-                self.It[ii].append(torch.tensor(self.I[ii][:,:,:]).type(self.params['dtype']).cuda())
-                for i in range(self.params['nt']):
-                    self.It[ii].append(torch.tensor(self.I[ii][:,:,:]).type(self.params['dtype']).cuda())
+                for i in range(self.params['nt']+1):
+                    self.It[ii][i] = torch.tensor(self.I[ii][:,:,:]).type(self.params['dtype']).cuda()
         else:
             self.vt0 = [torch.tensor(np.zeros((self.nx[0],self.nx[1],self.nx[2]))).type(self.params['dtype'])]*self.params['nt']
             self.vt1 = [torch.tensor(np.zeros((self.nx[0],self.nx[1],self.nx[2]))).type(self.params['dtype'])]*self.params['nt']
@@ -341,11 +340,10 @@ class LDDMM:
             self.vt0 = []
             self.vt1 = []
             self.detjac = []
-            self.It = [[],[]]
+            self.It = [ [None]*(self.params['nt']+1) for i in range(len(self.I)) ]
             for ii in range(len(self.I)):
-                self.It[ii].append(torch.tensor(self.I[ii][:,:]).type(self.params['dtype']).cuda())
-                for i in range(self.params['nt']):
-                    self.It[ii].append(torch.tensor(self.I[ii][:,:]).type(self.params['dtype']).cuda())
+                for i in range(self.params['nt']+1):
+                    self.It[ii][i] = torch.tensor(self.I[ii][:,:]).type(self.params['dtype']).cuda()
             
             for i in range(self.params['nt']):
                 self.vt0.append(torch.tensor(np.zeros((self.nx[0],self.nx[1]))).type(self.params['dtype']).cuda())

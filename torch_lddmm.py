@@ -9,7 +9,7 @@ sys.path.insert(0,'/cis/home/leebc/Software/')
 import nibabel as nib
 
 class LDDMM:
-    def __init__(self,template=None,target=None,outdir='./',gpu_number=0,a=5.0,p=2,niter=100,epsilon=5e-3,epsilonL=1.0e-7,epsilonT=2.0e-5,sigma=2.0,sigmaR=1.0,nt=5,doaffine=0,checkaffinestep=1,optimizer='gd',maxclimbcount=3,savebestv=False,minenergychange = 0.000001,minbeta=1e-6,dtype='float',im_norm_ms=0):
+    def __init__(self,template=None,target=None,costmask=None,outdir='./',gpu_number=0,a=5.0,p=2,niter=100,epsilon=5e-3,epsilonL=1.0e-7,epsilonT=2.0e-5,sigma=2.0,sigmaR=1.0,nt=5,doaffine=0,checkaffinestep=1,optimizer='gd',maxclimbcount=3,savebestv=False,minenergychange = 0.000001,minbeta=1e-6,dtype='float',im_norm_ms=0):
         self.params = {}
         self.params['gpu_number'] = gpu_number
         self.params['a'] = float(a)
@@ -26,6 +26,7 @@ class LDDMM:
         self.params['nt'] = nt
         self.params['template'] = template
         self.params['target'] = target
+        self.params['costmask'] = costmask
         self.params['outdir'] = outdir
         self.params['doaffine'] = doaffine
         self.params['checkaffinestep'] = checkaffinestep
@@ -59,6 +60,7 @@ class LDDMM:
         print('>    im_norm_ms      = ' + str(im_norm_ms) + ' (normalize image by mean and std: 0 = no, 1 = yes)')
         print('>    gpu_number      = ' + str(gpu_number) + ' (index of CUDA_VISIBLE_DEVICES to use)')
         print('>    dtype           = ' + str(dtype) + ' (bit depth, \'float\' or \'double\')')
+        print('>    costmask        = ' + str(costmask) + ' (costmask file name)')
         print('>    outdir          = ' + str(outdir) + ' (output directory name)')
         if optimizer in optimizer_dict:
             print('>    optimizer       = ' + str(optimizer_dict[optimizer]) + ' (optimizer type)')
@@ -87,14 +89,14 @@ class LDDMM:
         return
     
     # image loader
-    def loadImage(self, filename):
+    def loadImage(self, filename,im_norm_ms=0):
         fname, fext = os.path.splitext(filename)
         if fext == '.img' or fext == '.hdr':
             img_struct = nib.load(fname + '.img')
             spacing = img_struct.header['pixdim'][1:4]
             size = img_struct.header['dim'][1:4]
             image = np.squeeze(img_struct.get_data().astype(np.float32))
-            if self.params['im_norm_ms'] == 1:
+            if im_norm_ms == 1:
                 if np.std(image) != 0:
                     image = torch.tensor((image - np.mean(image)) / np.std(image)).type(self.params['dtype']).to(device=self.params['cuda'])
                 else:
@@ -121,6 +123,7 @@ class LDDMM:
         
         number_list = ['a','p','niter','epsilon','sigmaR','nt','doaffine','epsilonL','epsilonT','im_norm_ms']
         string_list = ['outdir','optimizer']
+        stringornone_list = ['costmask']
         stringorlist_list = ['template','target']
         numberorlist_list = ['sigma']
         for i in range(len(number_list)):
@@ -132,6 +135,11 @@ class LDDMM:
             if not isinstance(self.params[string_list[i]], str):
                 flag = -1
                 print('ERROR: ' + string_list[i] + ' must be a string.')
+        
+        for i in range(len(stringornone_list)):
+            if not isinstance(self.params[stringornone_list[i]], str) and self.params[stringornone_list[i]] is not None:
+                flag = -1
+                print('ERROR: ' + stringornone_list[i] + ' must be a string or None.')
         
         for i in range(len(stringorlist_list)):
             if not isinstance(self.params[stringorlist_list[i]], str) and not isinstance(self.params[stringorlist_list[i]], list):
@@ -154,6 +162,12 @@ class LDDMM:
         if len(channel_set) > 2 or (len(channel_set) == 2 and 1 not in channel_set):
             print('ERROR: number of channels is not the same between sigma, template, and target.')
             flag = -1
+        elif len(self.params['template']) != len(self.params['target']):
+            print('ERROR: number of channels is not the same between template and target.')
+            flag = -1
+        elif len(self.params['sigma']) > 1 and len(self.params['sigma']) != len(self.params['template']):
+            print('ERROR: sigma does not have channels of size 1 or # of template channels.')
+            flag = -1
         elif (len(channel_set) == 2 and 1 in channel_set):
             channel_set.remove(1)
             for i in range(len(channel_check_list)):
@@ -169,30 +183,42 @@ class LDDMM:
         return flag
     
     # helper function to load images
-    def _load(self, template, target):
+    def _load(self, template, target, costmask):
         if isinstance(template, str):
             I = [None]
             Ispacing = [None]
             Isize = [None]
-            I[0],Ispacing[0],Isize[0] = self.loadImage(template)
+            I[0],Ispacing[0],Isize[0] = self.loadImage(template,im_norm_ms=self.params['im_norm_ms'])
         elif isinstance(template, list):
             I = [None]*len(template)
             Ispacing = [None]*len(template)
             Isize = [None]*len(template)
             for i in range(len(template)):
-                I[i],Ispacing[i],Isize[i] = self.loadImage(template[i])
+                I[i],Ispacing[i],Isize[i] = self.loadImage(template[i],im_norm_ms=self.params['im_norm_ms'])
         
         if isinstance(target, str):
             J = [None]
             Jspacing = [None]
             Jsize = [None]
-            J[0],Jspacing[0],Jsize[0] = self.loadImage(target)
+            J[0],Jspacing[0],Jsize[0] = self.loadImage(target,im_norm_ms=self.params['im_norm_ms'])
         elif isinstance(target, list):
             J = [None]*len(target)
             Jspacing = [None]*len(target)
             Jsize = [None]*len(target)
             for i in range(len(target)):
-                J[i],Jspacing[i],Jsize[i] = self.loadImage(target[i])
+                J[i],Jspacing[i],Jsize[i] = self.loadImage(target[i],im_norm_ms=self.params['im_norm_ms'])
+        
+        # load costmask if the variable exists
+        if isinstance(costmask, str):
+            K = [None]
+            Kspacing = [None]
+            Ksize = [None]
+            # never normalize cost mask
+            K[0],Kspacing[0],Ksize[0] = self.loadImage(costmask,im_norm_ms=0)
+        else:
+            K = []
+            Kspacing = []
+            Ksize = []
         
         if len(J) != len(I):
             print('ERROR: images must have the same number of channels.')
@@ -200,17 +226,22 @@ class LDDMM:
             
         #if I.shape[0] != J.shape[0] or I.shape[1] != J.shape[1] or I.shape[2] != J.shape[2]:
         #if I.shape != J.shape:
-        if not all([x.shape == I[0].shape for x in I+J]):
+        if not all([x.shape == I[0].shape for x in I+J+K]):
             print('ERROR: the image sizes are not the same.\n')
             return -1
         #elif Ispacing[0] != Jspacing[0] or Ispacing[1] != Jspacing[1] or Ispacing[2] != Jspacing[2]
         #elif np.sum(Ispacing==Jspacing) < len(I.shape):
-        elif not all([list(x == Ispacing[0]) for x in Ispacing+Jspacing]):
+        elif not all([list(x == Ispacing[0]) for x in Ispacing+Jspacing+Kspacing]):
             print('ERROR: the image pixel spacings are not the same.\n')
             return -1
         else:
             self.I = I
             self.J = J
+            if costmask is not None:
+                self.M = K[0]
+            else:
+                self.M = torch.tensor(np.ones(I[0].shape)).type(self.params['dtype']).to(device=self.params['cuda'])
+            
             self.dx = list(Ispacing[0])
             self.dx = [float(x) for x in self.dx]
             self.nx = I[0].shape
@@ -552,8 +583,8 @@ class LDDMM:
         lambda1 = [None]*len(self.I)
         EM = 0
         for i in range(len(self.I)):
-            lambda1[i] = -(self.It[i][-1] - self.J[i])/self.params['sigma'][i]**2 # may not need to store this
-            EM += torch.sum((self.It[i][-1] - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
+            lambda1[i] = -1*self.M*(self.It[i][-1] - self.J[i])/self.params['sigma'][i]**2 # may not need to store this
+            EM += torch.sum(self.M*(self.It[i][-1] - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
         return lambda1, EM
     
     # compute matching energy
@@ -561,22 +592,22 @@ class LDDMM:
         lambda1 = [None]*len(self.I)
         EM = 0
         for i in range(len(self.I)):
-            lambda1[i] = -(self.It[i][-1] - self.J[i])/self.params['sigma'][i]**2 # may not need to store this
-            EM += torch.sum((self.It[i][-1] - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]
+            lambda1[i] = -1*self.M*(self.It[i][-1] - self.J[i])/self.params['sigma'][i]**2 # may not need to store this
+            EM += torch.sum(self.M*(self.It[i][-1] - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]
         return lambda1, EM
     
     # compute matching energy without lambda1
     def calculateMatchingEnergyMSEOnly(self, I):
         EM = 0
         for i in range(len(self.I)):
-            EM += torch.sum((I[i] - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
+            EM += torch.sum(self.M*(I[i] - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
         return EM
     
     # compute matching energy without lambda1
     def calculateMatchingEnergyMSEOnly2d(self, I):
         EM = 0
         for i in range(len(self.I)):
-            EM += torch.sum((I[i] - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]
+            EM += torch.sum(self.M*(I[i] - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]
         return EM
     
     # update learning rate for gradient descent
@@ -857,7 +888,7 @@ class LDDMM:
         
         if restart:
             # load images
-            flag = self._load(self.params['template'],self.params['target'])
+            flag = self._load(self.params['template'],self.params['target'],self.params['costmask'])
             if flag==-1:
                 print('ERROR: images did not load.')
                 return

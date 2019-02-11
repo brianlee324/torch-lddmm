@@ -9,7 +9,7 @@ sys.path.insert(0,'/cis/home/leebc/Software/')
 import nibabel as nib
 
 class LDDMM:
-    def __init__(self,template=None,target=None,costmask=None,outdir='./',gpu_number=0,a=5.0,p=2,niter=100,epsilon=5e-3,epsilonL=1.0e-7,epsilonT=2.0e-5,sigma=2.0,sigmaR=1.0,nt=5,doaffine=0,checkaffinestep=1,optimizer='gd',maxclimbcount=3,savebestv=False,minenergychange = 0.000001,minbeta=1e-6,dtype='float',im_norm_ms=0):
+    def __init__(self,template=None,target=None,costmask=None,outdir='./',gpu_number=0,a=5.0,p=2,niter=100,epsilon=5e-3,epsilonL=1.0e-7,epsilonT=2.0e-5,sigma=2.0,sigmaR=1.0,nt=5,doaffine=0,checkaffinestep=1,optimizer='gd',maxclimbcount=3,savebestv=False,minenergychange = 0.000001,minbeta=1e-6,dtype='float',im_norm_ms=0,slice_alignment=0):
         self.params = {}
         self.params['gpu_number'] = gpu_number
         self.params['a'] = float(a)
@@ -36,6 +36,7 @@ class LDDMM:
         self.params['minbeta'] = minbeta
         self.params['minenergychange'] = minenergychange
         self.params['im_norm_ms'] = im_norm_ms
+        self.params['slice_alignment'] = slice_alignment
         dtype_dict = {}
         dtype_dict['float'] = 'torch.FloatTensor'
         dtype_dict['double'] = 'torch.DoubleTensor'
@@ -121,7 +122,7 @@ class LDDMM:
             else:
                 self.params['cuda'] = 'cuda:' + str(self.params['gpu_number'])
         
-        number_list = ['a','p','niter','epsilon','sigmaR','nt','doaffine','epsilonL','epsilonT','im_norm_ms']
+        number_list = ['a','p','niter','epsilon','sigmaR','nt','doaffine','epsilonL','epsilonT','im_norm_ms','slice_alignment']
         string_list = ['outdir','optimizer']
         stringornone_list = ['costmask']
         stringorlist_list = ['template','target']
@@ -317,6 +318,9 @@ class LDDMM:
         self.X0 = torch.tensor(X0).type(self.params['dtype']).to(device=self.params['cuda'])
         self.X1 = torch.tensor(X1).type(self.params['dtype']).to(device=self.params['cuda'])
         self.X2 = torch.tensor(X2).type(self.params['dtype']).to(device=self.params['cuda'])
+        # 2D sampling domain for slice alignment
+        #if self.params['slice_alignment'] == 1:
+        
         # v and I
         if self.params['gpu_number'] is not None:
             self.vt0 = []
@@ -803,6 +807,188 @@ class LDDMM:
         e = torch.tensor(scipy.linalg.expm(-e * gradA_cpu_numpy)).type(self.params['dtype']).to(device=self.params['cuda'])
         self.lastaffineA = self.affineA.clone()
         self.affineA = torch.mm(self.affineA,e)
+    
+    
+    # for section alignment
+    def sa(self, input, atlas, a=None, b=None, theta=None, niter=250, dim=2,missingslices=[],epsilonxy=0.0000025, epsilontheta=0.00000055,minepsilonxy=float(1e-20),minepsilontheta=2.0*10**-24,sigmaxy = 0.7*10, sigmatheta = np.pi/180*2*10, sigma_atlas = 1.0, sigma_target = 1.0,sigma_target_radius = 30,min_sigma_target = 1.0,sigma_atlas_radius = 34,min_sigma_atlas = 2.):
+        # equivalent of cor_sag_rot
+        if dim != 2:
+            target = torch.transpose(input,dim, 2).clone()
+            template = torch.transpose(atlas,dim, 2).clone()
+            if dim == 0:
+                dx = [self.dx[i] for i in [2, 1, 0]]
+                nx = [self.nx[i] for i in [2, 1, 0]]
+            else:
+                dx = [self.dx[i] for i in [0, 2, 1]]
+                nx = [self.nx[i] for i in [0, 2, 1]]
+        else:
+            target = input.clone()
+            nx = self.nx
+            dx = self.dx
+        
+        # allocate coordinate grid
+        x0 = np.arange(nx[0])*dx[0]
+        x1 = np.arange(nx[1])*dx[1]
+        x2 = np.arange(nx[2])*dx[2]
+        self.meanx0 = np.mean(x0)
+        self.meanx1 = np.mean(x1)
+        X0,X1 = np.meshgrid(x0-self.meanx0,x1-self.meanx1,indexing='ij')
+        self.saX0 = torch.tensor(X0).type(self.params['dtype']).to(device=self.params['cuda'])
+        self.saX1 = torch.tensor(X1).type(self.params['dtype']).to(device=self.params['cuda'])
+        X,Y,_ = np.meshgrid(x0-self.meanx0,x1-self.meanx1,x2-np.mean(x2),indexing='ij')
+        X = torch.tensor(X).type(self.params['dtype']).to(device=self.params['cuda'])
+        Y = torch.tensor(Y).type(self.params['dtype']).to(device=self.params['cuda'])
+        
+        # allocate parameters
+        if a is None:
+            a = torch.zeros((nx[2],)).type(self.params['dtype']).to(device=self.params['cuda'])
+        
+        if b is None:
+            b = torch.zeros((nx[2],)).type(self.params['dtype']).to(device=self.params['cuda'])
+        
+        if theta is None:
+            theta = torch.zeros((nx[2],)).type(self.params['dtype']).to(device=self.params['cuda'])
+        
+        # allocate stuff
+        factor_vector = np.ones((nx[2],))
+        factor_vector[0:sigma_target_radius] = np.linspace(min_sigma_target,1.,sigma_target_radius)
+        factor_vector[-sigma_target_radius:] = np.linspace(1.,min_sigma_target,sigma_target_radius)
+        sigma_target_vec = torch.tensor(np.ones((nx[2],)) * sigma_target * factor_vector).type(self.params['dtype']).to(device=self.params['cuda'])
+        factor_vector = np.ones((nx[2],))
+        factor_vector[0:sigma_atlas_radius] = np.linspace(min_sigma_atlas,1.,sigma_atlas_radius)
+        factor_vector[-sigma_atlas_radius:] = np.linspace(1.,min_sigma_atlas,sigma_atlas_radius)
+        sigma_atlas_vec = torch.tensor(np.ones((nx[2],)) * sigma_atlas * factor_vector).type(self.params['dtype']).to(device=self.params['cuda'])
+        
+        
+        # get slice z coordinates
+        #TODO: remove missing slices from the data
+        slicenumbers = range(target.shape[2])
+        for i in range(len(missingslices)):
+            slicenumbers.remove(missingslices[i])
+        
+        slicecoord = torch.stack([torch.tensor(x*dx[2] - dx[2]/2.0).type(self.params['dtype']).to(device=self.params['cuda']) for x in slicenumbers])
+        shiftindices = [-2,-1,0,1,2]
+        mynumerator = torch.tensor(np.zeros((len(shiftindices), slicecoord.shape[0]))).type(self.params['dtype']).to(device=self.params['cuda'])
+        dz = ((torch.roll(slicecoord,-1) - slicecoord) - (torch.roll(slicecoord,1) - slicecoord)) / 2.0
+        # account for rollover
+        dz[0] = dz[1]
+        dz[-1] = dz[-2]
+        # smooth?
+        
+        # downsample?
+        
+        # scale the image?
+        
+        # loop
+        iter = 1
+        E = torch.tensor(1e15).type(self.params['dtype']).to(device=self.params['cuda'])
+        while (iter < niter):
+            # interpolate stack
+            for i in range(nx[2]):
+                if i in missingslices:
+                    continue
+                
+                # maybe don't store TX and TY
+                TX = torch.cos(theta[i])*self.saX1 + -1*torch.sin(theta[i])*self.saX0 + a[i]
+                TY = torch.sin(theta[i])*self.saX1 + torch.cos(theta[i])*self.saX0 + b[i]
+                target[:,:,i] = torch.squeeze(torch.nn.functional.grid_sample(torch.squeeze(torch.transpose(input,dim, 2)[:,:,i]).unsqueeze(0).unsqueeze(0),torch.stack( ( (TY)/(nx[1]*dx[1]-dx[1])*2,(TX)/(nx[0]*dx[0]-dx[0])*2 ) ,dim=2).unsqueeze(0),padding_mode='border'))
+            
+            # centered difference approximate
+            #DYTI = ( torch.cat( (target[1:,:,:], torch.zeros(1,nx[1],nx[2])), dim=0) - torch.cat( ( torch.zeros(1,nx[1],nx[2]), target[:-1,:,:]), dim=0) ) / dx[1] / 2.0
+            #DXTI = ( torch.cat( (target[:,1:,:], torch.zeros(nx[1],1,nx[2])), dim=0) - torch.cat( ( torch.zeros(nx[1],1,nx[2]), target[:,:-1,:]), dim=0) ) / dx[0] / 2.0
+            DXTI = (torch.roll(target,-1,dims=1) - torch.roll(target,1,dims=1)) / dx[0] / 2.0
+            DYTI = (torch.roll(target,-1,dims=0) - torch.roll(target,1,dims=0)) / dx[1] / 2.0
+            DXTI[:,0,:] = target[:,1,:]
+            DXTI[:,-1,:] = -1*target[:,-2,:]
+            DYTI[0,:,:] = target[1,:,:]
+            DYTI[-1,:,:] = -1*target[-2,:,:]
+            
+            # 2nd derivative
+            mynumerator *= 0.0 # hack to set to 0, not sure if actually faster
+            for i in range(len(shiftindices)):
+                myshiftind = list(shiftindices)
+                myshiftind.remove(shiftindices[i])
+                mynumerator[i,:] = 2.0 * torch.roll(slicecoord,myshiftind[0]) * torch.roll(slicecoord,myshiftind[1]) + 2.0 * torch.roll(slicecoord,myshiftind[0]) * torch.roll(slicecoord,myshiftind[2]) + 2.0 * torch.roll(slicecoord,myshiftind[0]) * torch.roll(slicecoord,myshiftind[3]) + 2.0 * torch.roll(slicecoord,myshiftind[1]) * torch.roll(slicecoord,myshiftind[2]) + 2.0 * torch.roll(slicecoord,myshiftind[1]) * torch.roll(slicecoord,myshiftind[3]) + 2.0 * torch.roll(slicecoord,myshiftind[2]) * torch.roll(slicecoord,myshiftind[3]) - 6.0 * slicecoord * torch.roll(slicecoord,myshiftind[0]) - 6.0 * slicecoord * torch.roll(slicecoord,myshiftind[1]) - 6.0 * slicecoord * torch.roll(slicecoord,myshiftind[2]) - 6.0 * slicecoord * torch.roll(slicecoord,myshiftind[3]) + 12.0 * slicecoord**2
+            
+            # this array is mirrored left-right for some reason
+            # TODO: correct torch.roll(target) to account for zero padding
+            LZTI = torch.reshape( mynumerator[3,:] / ( (torch.roll(slicecoord,1) - slicecoord) * (torch.roll(slicecoord,1) - torch.roll(slicecoord,-1)) * (torch.roll(slicecoord,1) - torch.roll(slicecoord,2)) * (torch.roll(slicecoord,1) - torch.roll(slicecoord,-2)) ), [1,1,slicecoord.shape[0] ] ).expand([target.shape[0], target.shape[1], -1] ) * torch.roll(target,1,dims=2) \
+                + torch.reshape( mynumerator[4,:] / ( (torch.roll(slicecoord,2) - slicecoord) * (torch.roll(slicecoord,2) - torch.roll(slicecoord,-1)) * (torch.roll(slicecoord,2) - torch.roll(slicecoord,-2)) * (torch.roll(slicecoord,2) - torch.roll(slicecoord,1)) ), [1,1,slicecoord.shape[0]]).expand( [target.shape[0],target.shape[1], -1] ) * torch.roll(target,2,dims=2) \
+                + torch.reshape( mynumerator[1,:] / ( (torch.roll(slicecoord,-1) - slicecoord) * (torch.roll(slicecoord,-1) - torch.roll(slicecoord,1)) * (torch.roll(slicecoord,-1) - torch.roll(slicecoord,-2)) * (torch.roll(slicecoord,-1) - torch.roll(slicecoord,2)) ), [1,1,slicecoord.shape[0]]).expand( [target.shape[0],target.shape[1],-1] ) * torch.roll(target,-1,dims=2) \
+                + torch.reshape( mynumerator[0,:] / ( (torch.roll(slicecoord,-2) - slicecoord) * (torch.roll(slicecoord,-2) - torch.roll(slicecoord,1)) * (torch.roll(slicecoord,-2) - torch.roll(slicecoord,2)) * (torch.roll(slicecoord,-2) - torch.roll(slicecoord,-1)) ), [1,1,slicecoord.shape[0]]).expand( [target.shape[0],target.shape[1],-1] ) * torch.roll(target,-2,dims=2) \
+                + torch.reshape( mynumerator[2,:] / ( (slicecoord - torch.roll(slicecoord,1)) * (slicecoord - torch.roll(slicecoord,2)) * (slicecoord - torch.roll(slicecoord,-1)) * (slicecoord - torch.roll(slicecoord,-2)) ), [1,1,slicecoord.shape[0]]).expand( [target.shape[0],target.shape[1],-1] ) * target
+            
+            # compute energies
+            last_E = E.clone()
+            Eimtarget = torch.sum(1.0 / torch.squeeze(sigma_target_vec)**2 * torch.squeeze(torch.sum(torch.sum(-LZTI * target,dim=0),dim=0)) ) * np.prod(dx)/2.0
+            Eimatlas = torch.sum(1.0 / sigma_atlas_vec**2 * torch.squeeze(torch.sum(torch.sum( (target - template[:,:,slicenumbers])**2 , dim=0),dim=0))) * np.prod(dx)/2.0
+            Eregxy = torch.sum((a**2 + b**2)*dz)/2.0/sigmaxy**2/slicecoord.shape[0]
+            Eregtheta = torch.sum((theta**2)*dz)/2.0/sigmatheta**2/slicecoord.shape[0]
+            E = Eimtarget + Eimatlas + Eregxy + Eregtheta
+            
+            # adjust optimization parameters
+            # locked to gdr for now
+            if E < last_E and iter > 1:
+                if np.mod(iter,2) == 0:
+                    epsilonxy *= 1.04
+                else:
+                    epsilontheta *= 1.04
+            
+            if E > last_E and iter > 1:
+                if np.mod(iter,2) == 0:
+                    epsilonxy = epsilonxy/1.5
+                    #print('reducing epsilonxy to ' + str(epsilonxy))
+                    if epsilonxy < minepsilonxy and epsilontheta < minepsilontheta:
+                        break
+                else:
+                    epsilontheta = epsilontheta/1.5
+                    #print('reducing epsilontheta to ' + str(epsilontheta))
+                    if epsilontheta < minepsilontheta and epsilontheta < minepsilontheta:
+                        break
+            
+            
+            # print energies
+            if iter > 1:
+                start_time = end_time
+            
+            end_time = time.time()
+            if iter > 1:
+                print("iter: " + str(iter) + ", E= {:.3f}, Eim_t= {:.3f}, Eim_a= {:.3f}, ER_xy= {:.3f}, ER_t= {:.4f}, ep_xy= {:.4f}, ep_t= {:.4f}, time= {:.2f}.".format(E.item(),Eimtarget.item(),Eimatlas.item(),Eregxy.item(),Eregtheta.item(), epsilonxy, epsilontheta,end_time-start_time))
+            else:
+                print("iter: " + str(iter) + ", E= {:.3f}, Eim_t= {:.3f}, Eim_a= {:.3f}, ER_xy= {:.3f}, ER_t= {:.4f}, ep_xy= {:.4f}, ep_t= {:.4f}.".format(E.item(),Eimtarget.item(),Eimatlas.item(),Eregxy.item(),Eregtheta.item(), epsilonxy, epsilontheta))
+            #print('iter: ' + str(iter) +', cost: '+ str(E) +', im_t = ' +str(Eimtarget)+ ', im_a = ' + str(Eimatlas) + ', regxy = ' +str(Eregxy)+ ', regt = ' +str(Eregtheta)+ ', ep = ' +str(epsilonxy)+ ', ' +str(epsilontheta))
+            
+            # compute gradients
+            gradx = 1/sigma_target_vec**2 * torch.squeeze(torch.sum(torch.sum(-2*LZTI*DXTI,dim=0),dim=0) * dx[0] * dx[1])
+            grady = 1/sigma_target_vec**2 * torch.squeeze(torch.sum(torch.sum(-2*LZTI*DYTI,dim=0),dim=0) * dx[0] * dx[1])
+            
+            #diffatlas = torch.zeros(DXTI.shape)
+            diffatlas = target - template
+            # set missing slices to zero
+            for i in missingslices:
+                diffatlas[:,:,i] = torch.zeros((nx[0],nx[1],1))
+            
+            gradx = gradx + 1/sigma_atlas_vec**2 * torch.squeeze(torch.sum(torch.sum(2*DXTI*diffatlas,dim=0),dim=0) * dx[0] * dx[1])
+            grady = grady + 1/sigma_atlas_vec**2 * torch.squeeze(torch.sum(torch.sum(2*DYTI*diffatlas,dim=0),dim=0) * dx[0] * dx[1])
+            
+            gradtheta = 1/sigma_target_vec**2 * torch.squeeze(torch.sum(torch.sum( -2*LZTI*(DXTI*-1*X + DYTI*Y),dim=0),dim=0) * dx[0] * dx[1])
+            gradtheta = gradtheta + 1/sigma_atlas_vec**2 * torch.squeeze(torch.sum(torch.sum( 2* (DXTI*-1*X + DYTI*Y) * diffatlas,dim=0),dim=0) * dx[0] * dx[1])
+            
+            gradx += torch.squeeze(a)/sigmaxy**2
+            grady += torch.squeeze(b)/sigmaxy**2
+            gradtheta += torch.squeeze(theta)/sigmatheta**2
+            
+            # update parameters
+            #TODO: don't need to calculate gradtheta and gradxy every iteration
+            if np.mod(iter,2) == 1:
+                a = a-epsilonxy*gradx
+                b = b-epsilonxy*grady
+            else:
+                theta = theta-epsilontheta*gradtheta
+            
+            iter += 1
+        
+        return a, b, theta
     
     # main loop
     def registration(self):

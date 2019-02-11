@@ -810,7 +810,7 @@ class LDDMM:
     
     
     # for section alignment
-    def sa(self, input, atlas, a=None, b=None, theta=None, niter=250, dim=2,missingslices=[],epsilonxy=0.0000025, epsilontheta=0.00000055,minepsilonxy=float(1e-20),minepsilontheta=2.0*10**-24,sigmaxy = 0.7*10, sigmatheta = np.pi/180*2*10, sigma_atlas = 1.0, sigma_target = 1.0,sigma_target_radius = 30,min_sigma_target = 1.0,sigma_atlas_radius = 34,min_sigma_atlas = 2.):
+    def sa(self, input, atlas, a=None, b=None, theta=None, niter=250, dim=2,missingslices=[],epsilonxy=0.0000025, epsilontheta=0.00000055,minepsilonxy=float(1e-20),minepsilontheta=2.0*10**-24,sigmaxy = 0.7*10, sigmatheta = np.pi/180*2*10, sigma_atlas = 1.0, sigma_target = 1.0,sigma_target_radius = 30,min_sigma_target = 1.0,sigma_atlas_radius = 34,min_sigma_atlas = 2.,norm=0):
         # equivalent of cor_sag_rot
         if dim != 2:
             target = torch.transpose(input,dim, 2).clone()
@@ -823,6 +823,7 @@ class LDDMM:
                 nx = [self.nx[i] for i in [0, 2, 1]]
         else:
             target = input.clone()
+            template = atlas.clone()
             nx = self.nx
             dx = self.dx
         
@@ -866,7 +867,8 @@ class LDDMM:
         for i in range(len(missingslices)):
             slicenumbers.remove(missingslices[i])
         
-        slicecoord = torch.stack([torch.tensor(x*dx[2] - dx[2]/2.0).type(self.params['dtype']).to(device=self.params['cuda']) for x in slicenumbers])
+        #TODO: this is different from original
+        slicecoord = torch.stack([torch.tensor((x+1.0)*dx[2] - dx[2]/2.0).type(self.params['dtype']).to(device=self.params['cuda']) for x in slicenumbers])
         shiftindices = [-2,-1,0,1,2]
         mynumerator = torch.tensor(np.zeros((len(shiftindices), slicecoord.shape[0]))).type(self.params['dtype']).to(device=self.params['cuda'])
         dz = ((torch.roll(slicecoord,-1) - slicecoord) - (torch.roll(slicecoord,1) - slicecoord)) / 2.0
@@ -878,6 +880,16 @@ class LDDMM:
         # downsample?
         
         # scale the image?
+        if norm==1:
+            (scalelist,_) = torch.topk(torch.flatten(target),100000)
+            scale = scalelist[99999]
+            print(scale)
+            template = template / scale
+            target = target/scale
+            #template = (template - torch.min(template)) / torch.max((template - torch.min(template)))
+            #template = (template - torch.min(template)) / torch.max((template - torch.min(template)))
+        else:
+            scale = 1.0
         
         # loop
         iter = 1
@@ -891,17 +903,17 @@ class LDDMM:
                 # maybe don't store TX and TY
                 TX = torch.cos(theta[i])*self.saX1 + -1*torch.sin(theta[i])*self.saX0 + a[i]
                 TY = torch.sin(theta[i])*self.saX1 + torch.cos(theta[i])*self.saX0 + b[i]
-                target[:,:,i] = torch.squeeze(torch.nn.functional.grid_sample(torch.squeeze(torch.transpose(input,dim, 2)[:,:,i]).unsqueeze(0).unsqueeze(0),torch.stack( ( (TY)/(nx[1]*dx[1]-dx[1])*2,(TX)/(nx[0]*dx[0]-dx[0])*2 ) ,dim=2).unsqueeze(0),padding_mode='border'))
+                target[:,:,i] = torch.squeeze(torch.nn.functional.grid_sample(torch.squeeze(torch.transpose(input.clone(),dim, 2)[:,:,i]/scale).unsqueeze(0).unsqueeze(0),torch.stack( ( (TX)/(nx[1]*dx[1]-dx[1])*2, (TY)/(nx[0]*dx[0]-dx[0])*2 ) ,dim=2).unsqueeze(0),padding_mode='border'))
             
             # centered difference approximate
             #DYTI = ( torch.cat( (target[1:,:,:], torch.zeros(1,nx[1],nx[2])), dim=0) - torch.cat( ( torch.zeros(1,nx[1],nx[2]), target[:-1,:,:]), dim=0) ) / dx[1] / 2.0
             #DXTI = ( torch.cat( (target[:,1:,:], torch.zeros(nx[1],1,nx[2])), dim=0) - torch.cat( ( torch.zeros(nx[1],1,nx[2]), target[:,:-1,:]), dim=0) ) / dx[0] / 2.0
-            DXTI = (torch.roll(target,-1,dims=1) - torch.roll(target,1,dims=1)) / dx[0] / 2.0
-            DYTI = (torch.roll(target,-1,dims=0) - torch.roll(target,1,dims=0)) / dx[1] / 2.0
-            DXTI[:,0,:] = target[:,1,:]
-            DXTI[:,-1,:] = -1*target[:,-2,:]
-            DYTI[0,:,:] = target[1,:,:]
-            DYTI[-1,:,:] = -1*target[-2,:,:]
+            DXTI = (torch.roll(torch.nn.functional.pad(target,(2,2),'constant',0),-1,dims=1)[:,:,2:-2] - torch.roll(torch.nn.functional.pad(target,(2,2),'constant',0),1,dims=1)[:,:,2:-2]) / dx[0] / 2.0
+            DYTI = (torch.roll(torch.nn.functional.pad(target,(2,2),'constant',0),-1,dims=0)[:,:,2:-2] - torch.roll(torch.nn.functional.pad(target,(2,2),'constant',0),1,dims=0)[:,:,2:-2]) / dx[1] / 2.0
+            #DXTI[:,0,:] = target[:,1,:]
+            #DXTI[:,-1,:] = -1*target[:,-2,:]
+            #DYTI[0,:,:] = target[1,:,:]
+            #DYTI[-1,:,:] = -1*target[-2,:,:]
             
             # 2nd derivative
             mynumerator *= 0.0 # hack to set to 0, not sure if actually faster
@@ -911,11 +923,11 @@ class LDDMM:
                 mynumerator[i,:] = 2.0 * torch.roll(slicecoord,myshiftind[0]) * torch.roll(slicecoord,myshiftind[1]) + 2.0 * torch.roll(slicecoord,myshiftind[0]) * torch.roll(slicecoord,myshiftind[2]) + 2.0 * torch.roll(slicecoord,myshiftind[0]) * torch.roll(slicecoord,myshiftind[3]) + 2.0 * torch.roll(slicecoord,myshiftind[1]) * torch.roll(slicecoord,myshiftind[2]) + 2.0 * torch.roll(slicecoord,myshiftind[1]) * torch.roll(slicecoord,myshiftind[3]) + 2.0 * torch.roll(slicecoord,myshiftind[2]) * torch.roll(slicecoord,myshiftind[3]) - 6.0 * slicecoord * torch.roll(slicecoord,myshiftind[0]) - 6.0 * slicecoord * torch.roll(slicecoord,myshiftind[1]) - 6.0 * slicecoord * torch.roll(slicecoord,myshiftind[2]) - 6.0 * slicecoord * torch.roll(slicecoord,myshiftind[3]) + 12.0 * slicecoord**2
             
             # this array is mirrored left-right for some reason
-            # TODO: correct torch.roll(target) to account for zero padding
-            LZTI = torch.reshape( mynumerator[3,:] / ( (torch.roll(slicecoord,1) - slicecoord) * (torch.roll(slicecoord,1) - torch.roll(slicecoord,-1)) * (torch.roll(slicecoord,1) - torch.roll(slicecoord,2)) * (torch.roll(slicecoord,1) - torch.roll(slicecoord,-2)) ), [1,1,slicecoord.shape[0] ] ).expand([target.shape[0], target.shape[1], -1] ) * torch.roll(target,1,dims=2) \
-                + torch.reshape( mynumerator[4,:] / ( (torch.roll(slicecoord,2) - slicecoord) * (torch.roll(slicecoord,2) - torch.roll(slicecoord,-1)) * (torch.roll(slicecoord,2) - torch.roll(slicecoord,-2)) * (torch.roll(slicecoord,2) - torch.roll(slicecoord,1)) ), [1,1,slicecoord.shape[0]]).expand( [target.shape[0],target.shape[1], -1] ) * torch.roll(target,2,dims=2) \
-                + torch.reshape( mynumerator[1,:] / ( (torch.roll(slicecoord,-1) - slicecoord) * (torch.roll(slicecoord,-1) - torch.roll(slicecoord,1)) * (torch.roll(slicecoord,-1) - torch.roll(slicecoord,-2)) * (torch.roll(slicecoord,-1) - torch.roll(slicecoord,2)) ), [1,1,slicecoord.shape[0]]).expand( [target.shape[0],target.shape[1],-1] ) * torch.roll(target,-1,dims=2) \
-                + torch.reshape( mynumerator[0,:] / ( (torch.roll(slicecoord,-2) - slicecoord) * (torch.roll(slicecoord,-2) - torch.roll(slicecoord,1)) * (torch.roll(slicecoord,-2) - torch.roll(slicecoord,2)) * (torch.roll(slicecoord,-2) - torch.roll(slicecoord,-1)) ), [1,1,slicecoord.shape[0]]).expand( [target.shape[0],target.shape[1],-1] ) * torch.roll(target,-2,dims=2) \
+            # correct torch.roll(target) to account for zero padding
+            LZTI = torch.reshape( mynumerator[3,:] / ( (torch.roll(slicecoord,1) - slicecoord) * (torch.roll(slicecoord,1) - torch.roll(slicecoord,-1)) * (torch.roll(slicecoord,1) - torch.roll(slicecoord,2)) * (torch.roll(slicecoord,1) - torch.roll(slicecoord,-2)) ), [1,1,slicecoord.shape[0] ] ).expand([target.shape[0], target.shape[1], -1] ) * torch.roll(torch.nn.functional.pad(target,(2,2),'constant',0),1,dims=2)[:,:,2:-2] \
+                + torch.reshape( mynumerator[4,:] / ( (torch.roll(slicecoord,2) - slicecoord) * (torch.roll(slicecoord,2) - torch.roll(slicecoord,-1)) * (torch.roll(slicecoord,2) - torch.roll(slicecoord,-2)) * (torch.roll(slicecoord,2) - torch.roll(slicecoord,1)) ), [1,1,slicecoord.shape[0]]).expand( [target.shape[0],target.shape[1], -1] ) * torch.roll(torch.nn.functional.pad(target,(2,2),'constant',0),2,dims=2)[:,:,2:-2] \
+                + torch.reshape( mynumerator[1,:] / ( (torch.roll(slicecoord,-1) - slicecoord) * (torch.roll(slicecoord,-1) - torch.roll(slicecoord,1)) * (torch.roll(slicecoord,-1) - torch.roll(slicecoord,-2)) * (torch.roll(slicecoord,-1) - torch.roll(slicecoord,2)) ), [1,1,slicecoord.shape[0]]).expand( [target.shape[0],target.shape[1],-1] ) * torch.roll(torch.nn.functional.pad(target,(2,2),'constant',0),-1,dims=2)[:,:,2:-2] \
+                + torch.reshape( mynumerator[0,:] / ( (torch.roll(slicecoord,-2) - slicecoord) * (torch.roll(slicecoord,-2) - torch.roll(slicecoord,1)) * (torch.roll(slicecoord,-2) - torch.roll(slicecoord,2)) * (torch.roll(slicecoord,-2) - torch.roll(slicecoord,-1)) ), [1,1,slicecoord.shape[0]]).expand( [target.shape[0],target.shape[1],-1] ) * torch.roll(torch.nn.functional.pad(target,(2,2),'constant',0),-2,dims=2)[:,:,2:-2] \
                 + torch.reshape( mynumerator[2,:] / ( (slicecoord - torch.roll(slicecoord,1)) * (slicecoord - torch.roll(slicecoord,2)) * (slicecoord - torch.roll(slicecoord,-1)) * (slicecoord - torch.roll(slicecoord,-2)) ), [1,1,slicecoord.shape[0]]).expand( [target.shape[0],target.shape[1],-1] ) * target
             
             # compute energies
@@ -959,8 +971,9 @@ class LDDMM:
             #print('iter: ' + str(iter) +', cost: '+ str(E) +', im_t = ' +str(Eimtarget)+ ', im_a = ' + str(Eimatlas) + ', regxy = ' +str(Eregxy)+ ', regt = ' +str(Eregtheta)+ ', ep = ' +str(epsilonxy)+ ', ' +str(epsilontheta))
             
             # compute gradients
-            gradx = 1/sigma_target_vec**2 * torch.squeeze(torch.sum(torch.sum(-2*LZTI*DXTI,dim=0),dim=0) * dx[0] * dx[1])
-            grady = 1/sigma_target_vec**2 * torch.squeeze(torch.sum(torch.sum(-2*LZTI*DYTI,dim=0),dim=0) * dx[0] * dx[1])
+            if np.mod(iter,2) == 1:
+                gradx = 1/sigma_target_vec**2 * torch.squeeze(torch.sum(torch.sum(-2*LZTI*DXTI,dim=0),dim=0) * dx[0] * dx[1])
+                grady = 1/sigma_target_vec**2 * torch.squeeze(torch.sum(torch.sum(-2*LZTI*DYTI,dim=0),dim=0) * dx[0] * dx[1])
             
             #diffatlas = torch.zeros(DXTI.shape)
             diffatlas = target - template
@@ -968,18 +981,19 @@ class LDDMM:
             for i in missingslices:
                 diffatlas[:,:,i] = torch.zeros((nx[0],nx[1],1))
             
-            gradx = gradx + 1/sigma_atlas_vec**2 * torch.squeeze(torch.sum(torch.sum(2*DXTI*diffatlas,dim=0),dim=0) * dx[0] * dx[1])
-            grady = grady + 1/sigma_atlas_vec**2 * torch.squeeze(torch.sum(torch.sum(2*DYTI*diffatlas,dim=0),dim=0) * dx[0] * dx[1])
+            if np.mod(iter,2) == 1:
+                gradx = gradx + 1/sigma_atlas_vec**2 * torch.squeeze(torch.sum(torch.sum(2*DXTI*diffatlas,dim=0),dim=0) * dx[0] * dx[1])
+                grady = grady + 1/sigma_atlas_vec**2 * torch.squeeze(torch.sum(torch.sum(2*DYTI*diffatlas,dim=0),dim=0) * dx[0] * dx[1])
+                gradx += torch.squeeze(a)/sigmaxy**2
+                grady += torch.squeeze(b)/sigmaxy**2
             
-            gradtheta = 1/sigma_target_vec**2 * torch.squeeze(torch.sum(torch.sum( -2*LZTI*(DXTI*-1*X + DYTI*Y),dim=0),dim=0) * dx[0] * dx[1])
-            gradtheta = gradtheta + 1/sigma_atlas_vec**2 * torch.squeeze(torch.sum(torch.sum( 2* (DXTI*-1*X + DYTI*Y) * diffatlas,dim=0),dim=0) * dx[0] * dx[1])
-            
-            gradx += torch.squeeze(a)/sigmaxy**2
-            grady += torch.squeeze(b)/sigmaxy**2
-            gradtheta += torch.squeeze(theta)/sigmatheta**2
+            if np.mod(iter,2) == 0:
+                gradtheta = 1/sigma_target_vec**2 * torch.squeeze(torch.sum(torch.sum( -2*LZTI*(DXTI*-1*X + DYTI*Y),dim=0),dim=0) * dx[0] * dx[1])
+                gradtheta = gradtheta + 1/sigma_atlas_vec**2 * torch.squeeze(torch.sum(torch.sum( 2* (DXTI*-1*X + DYTI*Y) * diffatlas,dim=0),dim=0) * dx[0] * dx[1])
+                gradtheta += torch.squeeze(theta)/sigmatheta**2
             
             # update parameters
-            #TODO: don't need to calculate gradtheta and gradxy every iteration
+            # don't need to calculate gradtheta and gradxy every iteration
             if np.mod(iter,2) == 1:
                 a = a-epsilonxy*gradx
                 b = b-epsilonxy*grady
@@ -988,7 +1002,7 @@ class LDDMM:
             
             iter += 1
         
-        return a, b, theta
+        return a, b, theta, target
     
     # main loop
     def registration(self):

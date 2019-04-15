@@ -3,13 +3,12 @@ import numpy as np
 import scipy.linalg
 import time
 import sys
-import time
 import os
 sys.path.insert(0,'/cis/home/leebc/Software/')
 import nibabel as nib
 
 class LDDMM:
-    def __init__(self,template=None,target=None,costmask=None,outdir='./',gpu_number=0,a=5.0,p=2,niter=100,epsilon=5e-3,epsilonL=1.0e-7,epsilonT=2.0e-5,sigma=2.0,sigmaR=1.0,nt=5,doaffine=0,checkaffinestep=1,optimizer='gd',maxclimbcount=3,savebestv=False,minenergychange = 0.000001,minbeta=1e-6,dtype='float',im_norm_ms=0,slice_alignment=0,energy_fraction=0.02,energy_fraction_from=0):
+    def __init__(self,template=None,target=None,costmask=None,outdir='./',gpu_number=0,a=5.0,p=2,niter=100,epsilon=5e-3,epsilonL=1.0e-7,epsilonT=2.0e-5,sigma=2.0,sigmaR=1.0,nt=5,doaffine=0,checkaffinestep=1,optimizer='gd',maxclimbcount=3,savebestv=False,minenergychange = 0.000001,minbeta=1e-6,dtype='float',im_norm_ms=0,slice_alignment=0,energy_fraction=0.02,energy_fraction_from=0,cc=0,cc_channels=[]):
         self.params = {}
         self.params['gpu_number'] = gpu_number
         self.params['a'] = float(a)
@@ -39,6 +38,8 @@ class LDDMM:
         self.params['slice_alignment'] = slice_alignment
         self.params['energy_fraction'] = energy_fraction
         self.params['energy_fraction_from'] = energy_fraction_from
+        self.params['cc'] = cc
+        self.params['cc_channels'] = cc_channels
         dtype_dict = {}
         dtype_dict['float'] = 'torch.FloatTensor'
         dtype_dict['double'] = 'torch.DoubleTensor'
@@ -55,8 +56,8 @@ class LDDMM:
         print('>    epsilonL        = ' + str(epsilonL) + ' (gradient descent step size, affine)')
         print('>    epsilonT        = ' + str(epsilonT) + ' (gradient descent step size, translation)')
         print('>    minbeta         = ' + str(minbeta) + ' (smallest multiple of epsilon)')
-        print('>    sigma           = ' + str(sigma) + ' (matching term coefficient (1/sigma**2))')
-        print('>    sigmaR          = ' + str(sigmaR)+ ' (regularization term coefficient (1/sigmaR**2))')
+        print('>    sigma           = ' + str(sigma) + ' (matching term coefficient (0.5/sigma**2))')
+        print('>    sigmaR          = ' + str(sigmaR)+ ' (regularization term coefficient (0.5/sigmaR**2))')
         print('>    nt              = ' + str(nt) + ' (number of time steps in velocity field)')
         print('>    doaffine        = ' + str(doaffine) + ' (interleave affine registration: 0 = no, 1 = yes)')
         print('>    checkaffinestep = ' + str(checkaffinestep) + ' (evaluate affine matching energy: 0 = no, 1 = yes)')
@@ -64,6 +65,8 @@ class LDDMM:
         print('>    gpu_number      = ' + str(gpu_number) + ' (index of CUDA_VISIBLE_DEVICES to use)')
         print('>    dtype           = ' + str(dtype) + ' (bit depth, \'float\' or \'double\')')
         print('>    energy_fraction = ' + str(energy_fraction) + ' (fraction of initial energy at which to stop)')
+        print('>    cc              = ' + str(cc) + ' (contrast correction: 0 = no, 1 = yes)')
+        print('>    cc_channels     = ' + str(cc_channels) + ' (image channels to run contrast correction (0-indexed))')
         print('>    costmask        = ' + str(costmask) + ' (costmask file name)')
         print('>    outdir          = ' + str(outdir) + ' (output directory name)')
         if optimizer in optimizer_dict:
@@ -126,11 +129,11 @@ class LDDMM:
             else:
                 self.params['cuda'] = 'cuda:' + str(self.params['gpu_number'])
         
-        number_list = ['a','p','niter','epsilon','sigmaR','nt','doaffine','epsilonL','epsilonT','im_norm_ms','slice_alignment','energy_fraction','energy_fraction_from']
+        number_list = ['a','p','niter','epsilon','sigmaR','nt','doaffine','epsilonL','epsilonT','im_norm_ms','slice_alignment','energy_fraction','energy_fraction_from','cc']
         string_list = ['outdir','optimizer']
         stringornone_list = ['costmask']
         stringorlist_list = ['template','target']
-        numberorlist_list = ['sigma']
+        numberorlist_list = ['sigma','cc_channels']
         for i in range(len(number_list)):
             if not isinstance(self.params[number_list[i]], (int, float)):
                 flag = -1
@@ -180,6 +183,17 @@ class LDDMM:
                     self.params[channel_check_list[i]] = self.params[channel_check_list[i]]*channel_set[0]
             
             print('WARNING: one or more of sigma, template, and target has length 1 while another does not.')
+        
+        # check contrast correction channels
+        if isinstance(self.params['cc_channels'],(int,float)):
+            self.params['cc_channels'] = [int(self.params['cc_channels'])]
+        elif isinstance(self.params['cc_channels'],list):
+            if len(self.params['cc_channels']) == 0:
+                self.params['cc_channels'] = list(range(max(channel_set)))
+            
+            if max(self.params['cc_channels']) > max(channel_set):
+                print('ERROR: one or more of the contrast correction channels is greater than the number of image channels.')
+                flag = -1
         
         # optimizer flags
         if self.params['optimizer'] == 'gdw':
@@ -368,6 +382,17 @@ class LDDMM:
         self.lastaffineA = torch.tensor(np.eye(4)).type(self.params['dtype']).to(device=self.params['cuda'])
         self.gradA = torch.tensor(np.zeros((4,4))).type(self.params['dtype']).to(device=self.params['cuda'])
         
+        # contrast correction variables
+        self.ccIbar = []
+        self.ccJbar = []
+        self.ccVarI = []
+        self.ccCovIJ = []
+        for i in range(len(self.I)):
+            self.ccIbar.append(0.0)
+            self.ccJbar.append(0.0)
+            self.ccVarI.append(1.0)
+            self.ccCovIJ.append(1.0)
+        
     # initialize lddmm variables
     def initializeVariables2d(self):
         # TODO: handle 2D and 3D versions
@@ -414,6 +439,17 @@ class LDDMM:
         self.affineA = torch.tensor(np.eye(3)).type(self.params['dtype']).to(device=self.params['cuda'])
         self.lastaffineA = torch.tensor(np.eye(3)).type(self.params['dtype']).to(device=self.params['cuda'])
         self.gradA = torch.tensor(np.zeros((3,3))).type(self.params['dtype']).to(device=self.params['cuda'])
+        
+        # contrast correction variables
+        self.ccIbar = []
+        self.ccJbar = []
+        self.ccVarI = []
+        self.ccCovIJ = []
+        for i in range(len(self.I)):
+            self.ccIbar.append(0.0)
+            self.ccJbar.append(0.0)
+            self.ccVarI.append(1.0)
+            self.ccCovIJ.append(1.0)
     
     # helper function for torch_gradient
     def _allocateGradientDivisors(self):
@@ -609,6 +645,21 @@ class LDDMM:
         phiinv2_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv2_gpu-self.X2).unsqueeze(0).unsqueeze(0),torch.stack(((torch.reshape(s[2,:],(self.X2.shape)))/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,(torch.reshape(s[1,:],(self.X1.shape)))/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,(torch.reshape(s[0,:],(self.X0.shape)))/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0),padding_mode='border')) + (torch.reshape(s[2,:],(self.X2.shape)))
         return phiinv0_gpu, phiinv1_gpu, phiinv2_gpu
     
+    # compute contrast correction values
+    def computeContrastTransform(self,I,J):
+        Ibar = torch.sum(I)/np.prod(I.shape)
+        Jbar = torch.sum(J)/np.prod(J.shape)
+        VarI = torch.sum((I-Ibar)**2)/np.prod(I.shape)
+        CovIJ = torch.sum((I-Ibar)*(J-Jbar))/np.prod(J.shape)
+        return Ibar, Jbar, VarI, CovIJ
+    
+    # contrast correction convenience function
+    def runContrastCorrection(self):
+        for i in self.params['cc_channels']:
+            self.ccIbar[i],self.ccJbar[i],self.ccVarI[i],self.ccCovIJ[i] = self.computeContrastTransform(self.It[i][-1], self.J[i])
+        
+        return
+    
     # compute regularization energy for time varying velocity field in for loop to conserve memory
     def calculateRegularizationEnergyVt(self):
         ER = 0.0
@@ -632,8 +683,8 @@ class LDDMM:
         lambda1 = [None]*len(self.I)
         EM = 0
         for i in range(len(self.I)):
-            lambda1[i] = -1*self.M*(self.It[i][-1] - self.J[i])/self.params['sigma'][i]**2 # may not need to store this
-            EM += torch.sum(self.M*(self.It[i][-1] - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
+            lambda1[i] = -1*self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])/self.params['sigma'][i]**2 # may not need to store this
+            EM += torch.sum(self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
         return lambda1, EM
     
     # compute matching energy
@@ -641,22 +692,22 @@ class LDDMM:
         lambda1 = [None]*len(self.I)
         EM = 0
         for i in range(len(self.I)):
-            lambda1[i] = -1*self.M*(self.It[i][-1] - self.J[i])/self.params['sigma'][i]**2 # may not need to store this
-            EM += torch.sum(self.M*(self.It[i][-1] - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]
+            lambda1[i] = -1*self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])/self.params['sigma'][i]**2 # may not need to store this
+            EM += torch.sum(self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]
         return lambda1, EM
     
     # compute matching energy without lambda1
     def calculateMatchingEnergyMSEOnly(self, I):
         EM = 0
         for i in range(len(self.I)):
-            EM += torch.sum(self.M*(I[i] - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
+            EM += torch.sum(self.M*( ((I[i] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
         return EM
     
     # compute matching energy without lambda1
     def calculateMatchingEnergyMSEOnly2d(self, I):
         EM = 0
         for i in range(len(self.I)):
-            EM += torch.sum(self.M*(I[i] - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]
+            EM += torch.sum(self.M*( ((I[i] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]
         return EM
     
     # update learning rate for gradient descent
@@ -719,7 +770,7 @@ class LDDMM:
         gi_y = [None]*len(self.I)
         gi_z = [None]*len(self.I)
         for i in range(len(self.I)):
-            gi_x[i],gi_y[i],gi_z[i] = self.torch_gradient(self.It[i][-1],self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)
+            gi_x[i],gi_y[i],gi_z[i] = self.torch_gradient(((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]),self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)
             # TODO: can this be efficiently vectorized?
             for r in range(3):
                 for c in range(4):
@@ -745,7 +796,6 @@ class LDDMM:
         phiinv1_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv1_gpu-self.X1).unsqueeze(0).unsqueeze(0),torch.stack(((self.X2+self.vt2[t]*self.dt)/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,(self.X1+self.vt1[t]*self.dt)/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,(self.X0+self.vt0[t]*self.dt)/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0),padding_mode='border')) + (self.X1+self.vt1[t]*self.dt)
         phiinv2_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv2_gpu-self.X2).unsqueeze(0).unsqueeze(0),torch.stack(((self.X2+self.vt2[t]*self.dt)/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,(self.X1+self.vt1[t]*self.dt)/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,(self.X0+self.vt0[t]*self.dt)/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0),padding_mode='border')) + (self.X2+self.vt2[t]*self.dt)
         
-        
         # find the determinant of Jacobian
         phiinv0_0,phiinv0_1,phiinv0_2 = self.torch_gradient(phiinv0_gpu,self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)
         phiinv1_0,phiinv1_1,phiinv1_2 = self.torch_gradient(phiinv1_gpu,self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)
@@ -770,9 +820,9 @@ class LDDMM:
             # get the gradient of the image at this time
             # is there a row column flip in matlab versus my torch_gradient function? yes, there is.
             if i == 0:
-                grad_list = [x*lambdat for x in self.torch_gradient(self.It[i][t],self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)]
+                grad_list = [x*lambdat for x in self.torch_gradient(((self.It[i][t] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]),self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)]
             else:
-                grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient(self.It[i][t],self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)])]
+                grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient(((self.It[i][t] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]),self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)])]
         
         # smooth it
         grad_list = [torch.irfft(torch.rfft(x,3,onesided=False)*self.Khat,3,onesided=False) for x in grad_list]
@@ -809,9 +859,9 @@ class LDDMM:
             # get the gradient of the image at this time
             # is there a row column flip in matlab versus my torch_gradient function? yes, there is.
             if i == 0:
-                grad_list = [x*lambdat for x in self.torch_gradient2d(self.It[i][t],self.dx[0],self.dx[1],self.grad_divisor_x,self.grad_divisor_y)]
+                grad_list = [x*lambdat for x in self.torch_gradient2d(((self.It[i][t] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]),self.dx[0],self.dx[1],self.grad_divisor_x,self.grad_divisor_y)]
             else:
-                grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient2d(self.It[i][t],self.dx[0],self.dx[1],self.grad_divisor_x,self.grad_divisor_y)])]
+                grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient2d(((self.It[i][t] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]),self.dx[0],self.dx[1],self.grad_divisor_x,self.grad_divisor_y)])]
         
         # smooth it
         grad_list = [torch.irfft(torch.rfft(x,2,onesided=False)*self.Khat,2,onesided=False) for x in grad_list]
@@ -1062,10 +1112,16 @@ class LDDMM:
             # deform images forward
             if self.J[0].dim() == 2:
                 _,_,_ = self.forwardDeformation2d()
+                if self.params['cc'] == 1:
+                    self.runContrastCorrection()
+                
                 ER = self.calculateRegularizationEnergyVt2d()
                 lambda1,EM = self.calculateMatchingEnergyMSE2d()
             else:
                 _,_,_,_ = self.forwardDeformation()
+                if self.params['cc'] == 1:
+                    self.runContrastCorrection()
+                
                 ER = self.calculateRegularizationEnergyVt()
                 lambda1,EM = self.calculateMatchingEnergyMSE()
             

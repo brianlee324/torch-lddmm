@@ -354,7 +354,10 @@ class LDDMM:
                 # NOTE: you cannot use pointers / list multiplication for cuda tensors if you want actual copies
                 #self.It.append(torch.tensor(self.I[:,:,:]).type(self.params['dtype']).cuda())
                 for i in range(self.params['nt']+1):
-                    self.It[ii][i] = torch.tensor(self.I[ii][:,:,:]).type(self.params['dtype']).cuda()
+                    if i == 0:
+                        self.It[ii][i] = self.I[ii]
+                    else:
+                        self.It[ii][i] = torch.tensor(self.I[ii][:,:,:]).type(self.params['dtype']).cuda()
         else:
             #self.vt0 = [torch.tensor(np.zeros((self.nx[0],self.nx[1],self.nx[2]))).type(self.params['dtype'])]*self.params['nt']
             #self.vt1 = [torch.tensor(np.zeros((self.nx[0],self.nx[1],self.nx[2]))).type(self.params['dtype'])]*self.params['nt']
@@ -428,12 +431,18 @@ class LDDMM:
                 self.vt1.append(torch.tensor(np.zeros((self.nx[0],self.nx[1]))).type(self.params['dtype']).cuda())
                 self.detjac.append(torch.tensor(np.zeros((self.nx[0],self.nx[1]))).type(self.params['dtype']).cuda())
         else:
-            self.vt0 = [torch.tensor(np.zeros((self.nx[0],self.nx[1]))).type(self.params['dtype'])]*self.params['nt']
-            self.vt1 = [torch.tensor(np.zeros((self.nx[0],self.nx[1]))).type(self.params['dtype'])]*self.params['nt']
-            self.detjac = [torch.tensor(np.zeros((self.nx[0],self.nx[1]))).type(self.params['dtype'])]*self.params['nt']
-            self.It = [[None]]*len(self.I)
-            for i in range(len(self.I)):
-                self.It[i] = [torch.tensor(self.I[i][:,:]).type(self.params['dtype'])]*(self.params['nt']+1)
+            self.vt0 = []
+            self.vt1 = []
+            self.detjac = []
+            self.It = [ [None]*(self.params['nt']+1) for i in range(len(self.I)) ]
+            for ii in range(len(self.I)):
+                for i in range(self.params['nt']+1):
+                    self.It[ii][i] = torch.tensor(self.I[ii][:,:]).type(self.params['dtype'])
+            
+            for i in range(self.params['nt']):
+                self.vt0.append(torch.tensor(np.zeros((self.nx[0],self.nx[1]))).type(self.params['dtype']))
+                self.vt1.append(torch.tensor(np.zeros((self.nx[0],self.nx[1]))).type(self.params['dtype']))
+                self.detjac.append(torch.tensor(np.zeros((self.nx[0],self.nx[1]))).type(self.params['dtype']))
         
         # affine parameters
         self.affineA = torch.tensor(np.eye(3)).type(self.params['dtype']).to(device=self.params['cuda'])
@@ -805,17 +814,18 @@ class LDDMM:
             + phiinv0_2*(phiinv1_0*phiinv2_1 - phiinv1_1*phiinv2_0)
         
         # deform phiinv back by affine transform if asked for
-        if self.params['doaffine'] == 1:
-            phiinv0_gpu = self.affineA[0,0]*phiinv0_gpu + self.affineA[0,1]*phiinv1_gpu + self.affineA[0,2]*phiinv2_gpu + self.affineA[0,3]
-            phiinv1_gpu = self.affineA[1,0]*phiinv0_gpu + self.affineA[1,1]*phiinv1_gpu + self.affineA[1,2]*phiinv2_gpu + self.affineA[1,3]
-            phiinv2_gpu = self.affineA[2,0]*phiinv0_gpu + self.affineA[2,1]*phiinv1_gpu + self.affineA[2,2]*phiinv2_gpu + self.affineA[2,3]
+        # is this accumulating?
+        #if self.params['doaffine'] == 1:
+        #    phiinv0_gpu = self.affineA[0,0]*phiinv0_gpu + self.affineA[0,1]*phiinv1_gpu + self.affineA[0,2]*phiinv2_gpu + self.affineA[0,3]
+        #    phiinv1_gpu = self.affineA[1,0]*phiinv0_gpu + self.affineA[1,1]*phiinv1_gpu + self.affineA[1,2]*phiinv2_gpu + self.affineA[1,3]
+        #    phiinv2_gpu = self.affineA[2,0]*phiinv0_gpu + self.affineA[2,1]*phiinv1_gpu + self.affineA[2,2]*phiinv2_gpu + self.affineA[2,3]
         
         for i in range(len(self.I)):
             # find lambda_t
             if self.params['doaffine'] == 0:
                 lambdat = torch.squeeze(torch.nn.functional.grid_sample(lambda1[i].unsqueeze(0).unsqueeze(0), torch.stack((phiinv2_gpu/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,phiinv1_gpu/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,phiinv0_gpu/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0),padding_mode='border'))*detjac
             else:
-                lambdat = torch.squeeze(torch.nn.functional.grid_sample(lambda1[i].unsqueeze(0).unsqueeze(0), torch.stack((phiinv2_gpu/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,phiinv1_gpu/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,phiinv0_gpu/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0),padding_mode='border'))*detjac*torch.det(self.affineA)
+                lambdat = torch.squeeze(torch.nn.functional.grid_sample(lambda1[i].unsqueeze(0).unsqueeze(0), torch.stack(((self.affineA[2,0]*phiinv0_gpu + self.affineA[2,1]*phiinv1_gpu + self.affineA[2,2]*phiinv2_gpu + self.affineA[2,3])/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,(self.affineA[1,0]*phiinv0_gpu + self.affineA[1,1]*phiinv1_gpu + self.affineA[1,2]*phiinv2_gpu + self.affineA[1,3])/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,(self.affineA[0,0]*phiinv0_gpu + self.affineA[0,1]*phiinv1_gpu + self.affineA[0,2]*phiinv2_gpu + self.affineA[0,3])/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0),padding_mode='border'))*detjac*torch.abs(torch.det(self.affineA))
             
             # get the gradient of the image at this time
             # is there a row column flip in matlab versus my torch_gradient function? yes, there is.

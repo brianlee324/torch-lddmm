@@ -8,7 +8,7 @@ sys.path.insert(0,'/cis/home/leebc/Software/')
 import nibabel as nib
 
 class LDDMM:
-    def __init__(self,template=None,target=None,costmask=None,outdir='./',gpu_number=0,a=5.0,p=2,niter=100,epsilon=5e-3,epsilonL=1.0e-7,epsilonT=2.0e-5,sigma=2.0,sigmaR=1.0,nt=5,doaffine=0,checkaffinestep=1,optimizer='gd',maxclimbcount=3,savebestv=False,minenergychange = 0.000001,minbeta=1e-6,dtype='float',im_norm_ms=0,slice_alignment=0,energy_fraction=0.02,energy_fraction_from=0,cc=0,cc_channels=[]):
+    def __init__(self,template=None,target=None,costmask=None,outdir='./',gpu_number=0,a=5.0,p=2,niter=100,epsilon=5e-3,epsilonL=1.0e-7,epsilonT=2.0e-5,sigma=2.0,sigmaR=1.0,nt=5,doaffine=0,checkaffinestep=1,optimizer='gd',maxclimbcount=3,savebestv=False,minenergychange = 0.000001,minbeta=1e-6,dtype='float',im_norm_ms=0,slice_alignment=0,energy_fraction=0.02,energy_fraction_from=0,cc=0,cc_channels=[],we=0,dx=None):
         self.params = {}
         self.params['gpu_number'] = gpu_number
         self.params['a'] = float(a)
@@ -40,6 +40,8 @@ class LDDMM:
         self.params['energy_fraction_from'] = energy_fraction_from
         self.params['cc'] = cc
         self.params['cc_channels'] = cc_channels
+        self.params['we'] = we
+        self.params['dx'] = dx
         dtype_dict = {}
         dtype_dict['float'] = 'torch.FloatTensor'
         dtype_dict['double'] = 'torch.DoubleTensor'
@@ -67,6 +69,7 @@ class LDDMM:
         print('>    energy_fraction = ' + str(energy_fraction) + ' (fraction of initial energy at which to stop)')
         print('>    cc              = ' + str(cc) + ' (contrast correction: 0 = no, 1 = yes)')
         print('>    cc_channels     = ' + str(cc_channels) + ' (image channels to run contrast correction (0-indexed))')
+        print('>    we              = ' + str(we) + ' (weight estimation: 0 = no, 1 = yes)')
         print('>    costmask        = ' + str(costmask) + ' (costmask file name)')
         print('>    outdir          = ' + str(outdir) + ' (output directory name)')
         if optimizer in optimizer_dict:
@@ -77,12 +80,30 @@ class LDDMM:
         
         print('\n')
         if template is None:
-            print('WARNING: template file name is not set. Use LDDMM.setParams(\'template\',filename).\n')
+            print('WARNING: template file name is not set. Use LDDMM.setParams(\'template\',filename\/array).\n')
+        elif isinstance(template,np.ndarray):
+            print('>    template        = numpy.ndarray\n')
+        elif isinstance(template,list) and isinstance(template[0],np.ndarray):
+            myprintstring = '>    template        = [numpy.ndarray'
+            for i in range(len(template)-1):
+                myprintstring = myprintstring + ', numpy.ndarray'
+            
+            myprintstring = myprintstring + ']\n'
+            print(myprintstring)
         else:
             print('>    template        = ' + str(template) + '\n')
         
         if target is None:
-            print('WARNING: target file name is not set. Use LDDMM.setParams(\'target\',filename).\n')
+            print('WARNING: target file name is not set. Use LDDMM.setParams(\'target\',filename\/array).\n')
+        elif isinstance(target,np.ndarray):
+            print('>    target          = numpy.ndarray\n')
+        elif isinstance(target,list) and isinstance(target[0],np.ndarray):
+            myprintstring = '>    target          = [numpy.ndarray'
+            for i in range(len(target)-1):
+                myprintstring = myprintstring + ', numpy.ndarray'
+            
+            myprintstring = myprintstring + ']\n'
+            print(myprintstring)
         else:
             print('>    target          = ' + str(target) + '\n')
     
@@ -113,6 +134,21 @@ class LDDMM:
             else:
                 image = torch.tensor(image).type(self.params['dtype']).to(device=self.params['cuda'])
             return (image, spacing, size)
+        elif fext == '.nii':
+            img_struct = nib.load(fname + '.nii')
+            spacing = img_struct.header['pixdim'][1:4]
+            size = img_struct.header['dim'][1:4]
+            image = np.squeeze(img_struct.get_data().astype(np.float32))
+            if im_norm_ms == 1:
+                if np.std(image) != 0:
+                    image = torch.tensor((image - np.mean(image)) / np.std(image)).type(self.params['dtype']).to(device=self.params['cuda'])
+
+                else:
+                    image = torch.tensor((image - np.mean(image)) ).type(self.params['dtype']).to(device=self.params['cuda'])
+                    print('WARNING: stdev of image is zero, not rescaling.')
+            else:
+                image = torch.tensor(image).type(self.params['dtype']).to(device=self.params['cuda'])
+            return (image, spacing, size)
         else:
             print('File format not supported.\n')
             return (-1,-1,-1)
@@ -129,11 +165,12 @@ class LDDMM:
             else:
                 self.params['cuda'] = 'cuda:' + str(self.params['gpu_number'])
         
-        number_list = ['a','p','niter','epsilon','sigmaR','nt','doaffine','epsilonL','epsilonT','im_norm_ms','slice_alignment','energy_fraction','energy_fraction_from','cc']
+        number_list = ['a','p','niter','epsilon','sigmaR','nt','doaffine','epsilonL','epsilonT','im_norm_ms','slice_alignment','energy_fraction','energy_fraction_from','cc','we']
         string_list = ['outdir','optimizer']
         stringornone_list = ['costmask']
-        stringorlist_list = ['template','target']
+        stringorlist_list = ['template','target'] # or array, actually
         numberorlist_list = ['sigma','cc_channels']
+        noneorarrayorlist_list = ['dx']
         for i in range(len(number_list)):
             if not isinstance(self.params[number_list[i]], (int, float)):
                 flag = -1
@@ -150,10 +187,10 @@ class LDDMM:
                 print('ERROR: ' + stringornone_list[i] + ' must be a string or None.')
         
         for i in range(len(stringorlist_list)):
-            if not isinstance(self.params[stringorlist_list[i]], str) and not isinstance(self.params[stringorlist_list[i]], list):
+            if not isinstance(self.params[stringorlist_list[i]], str) and not isinstance(self.params[stringorlist_list[i]], list) and not isinstance(self.params[stringorlist_list[i]], np.ndarray):
                 flag = -1
-                print('ERROR: ' + stringorlist_list[i] + ' must be a string or a list of strings.')
-            elif isinstance(self.params[stringorlist_list[i]], str):
+                print('ERROR: ' + stringorlist_list[i] + ' must be a string or an np.ndarray or a list of these.')
+            elif isinstance(self.params[stringorlist_list[i]], (str,np.ndarray)):
                 self.params[stringorlist_list[i]] = [self.params[stringorlist_list[i]]]
         
         for i in range(len(numberorlist_list)):
@@ -162,6 +199,15 @@ class LDDMM:
                 print('ERROR: ' + numberorlist_list[i] + ' must be a number or a list of numbers.')
             elif isinstance(self.params[numberorlist_list[i]], (int,float)):
                 self.params[numberorlist_list[i]] = [self.params[numberorlist_list[i]]]
+        
+        for i in range(len(noneorarrayorlist_list)):
+            if self.params[noneorarrayorlist_list[i]] is not None and not isinstance(self.params[noneorarrayorlist_list[i]], list) and not isinstance(self.params[noneorarrayorlist_list[i]], np.ndarray):
+                flag = -1
+                print('ERROR: ' + noneorarrayorlist_list[i] + ' must be None or a list or a np.ndarray.')
+            elif isinstance(self.params[noneorarrayorlist_list[i]], str):
+                self.params[noneorarrayorlist_list[i]] = [self.params[noneorarrayorlist_list[i]]]
+            elif isinstance(self.params[noneorarrayorlist_list[i]], np.ndarray):
+                self.params[noneorarrayorlist_list[i]] = np.ndarray.tolist(self.params[noneorarrayorlist_list[i]])
         
         # check channel length
         channel_check_list = ['sigma','template','target']
@@ -208,24 +254,92 @@ class LDDMM:
             Ispacing = [None]
             Isize = [None]
             I[0],Ispacing[0],Isize[0] = self.loadImage(template,im_norm_ms=self.params['im_norm_ms'])
+        elif isinstance(template, np.ndarray):
+            I = [None]
+            Ispacing = [None]
+            Isize = [None]
+            if self.params['im_norm_ms'] == 1:
+                I[0] = torch.tensor((template - np.mean(template)) / np.std(template)).type(self.params['dtype']).to(device=self.params['cuda'])
+            else:
+                I[0] = torch.tensor(template).type(self.params['dtype']).to(device=self.params['cuda'])
+            
+            Isize[0] = list(template.shape)
+            if self.params['dx'] == None:
+                Ispacing[0] = np.ones((3,)).astype(np.float32)
+            else:
+                Ispacing[0] = self.params['dx']
         elif isinstance(template, list):
-            I = [None]*len(template)
-            Ispacing = [None]*len(template)
-            Isize = [None]*len(template)
-            for i in range(len(template)):
-                I[i],Ispacing[i],Isize[i] = self.loadImage(template[i],im_norm_ms=self.params['im_norm_ms'])
+            if isinstance(template[0],str):
+                I = [None]*len(template)
+                Ispacing = [None]*len(template)
+                Isize = [None]*len(template)
+                for i in range(len(template)):
+                    I[i],Ispacing[i],Isize[i] = self.loadImage(template[i],im_norm_ms=self.params['im_norm_ms'])
+            # assumes images are the same spacing
+            elif isinstance(template[0],np.ndarray):
+                I = [None]*len(template)
+                Ispacing = [None]*len(template)
+                Isize = [None]*len(template)
+                for i in range(len(template)):
+                    if self.params['im_norm_ms'] == 1:
+                        I[i] = torch.tensor((template[i] - np.mean(template[i])) / np.std(template[i])).type(self.params['dtype']).to(device=self.params['cuda'])
+                    else:
+                        I[i] = torch.tensor(template[i]).type(self.params['dtype']).to(device=self.params['cuda'])
+                    
+                    Isize[i] = template[i].shape
+                    if self.params['dx'] == None:
+                        Ispacing[i] = np.ones((3,)).astype(np.float32)
+                    else:
+                        Ispacing[i] = self.params['dx']
+            else:
+                print('ERROR: received list of unhandled type for template image.')
+                return -1
         
         if isinstance(target, str):
             J = [None]
             Jspacing = [None]
             Jsize = [None]
             J[0],Jspacing[0],Jsize[0] = self.loadImage(target,im_norm_ms=self.params['im_norm_ms'])
+        elif isinstance(target, np.ndarray):
+            J = [None]
+            Jspacing = [None]
+            Jsize = [None]
+            if self.params['im_norm_ms'] == 1:
+                J[0] = torch.tensor((target - np.mean(target)) / np.std(target)).type(self.params['dtype']).to(device=self.params['cuda'])
+            else:
+                J[0] = torch.tensor(target).type(self.params['dtype']).to(device=self.params['cuda'])
+            
+            Jsize[0] = list(target.shape)
+            if self.params['dx'] == None:
+                Jspacing[0] = np.ones((3,)).astype(np.float32)
+            else:
+                Jspacing[0] = self.params['dx']
         elif isinstance(target, list):
-            J = [None]*len(target)
-            Jspacing = [None]*len(target)
-            Jsize = [None]*len(target)
-            for i in range(len(target)):
-                J[i],Jspacing[i],Jsize[i] = self.loadImage(target[i],im_norm_ms=self.params['im_norm_ms'])
+            if isinstance(target[0],str):
+                J = [None]*len(target)
+                Jspacing = [None]*len(target)
+                Jsize = [None]*len(target)
+                for i in range(len(target)):
+                    J[i],Jspacing[i],Jsize[i] = self.loadImage(target[i],im_norm_ms=self.params['im_norm_ms'])
+            # assumes images are the same spacing
+            elif isinstance(target[0],np.ndarray):
+                J = [None]*len(target)
+                Jspacing = [None]*len(target)
+                Jsize = [None]*len(target)
+                for i in range(len(target)):
+                    if self.params['im_norm_ms'] == 1:
+                        J[i] = torch.tensor((target[i] - np.mean(target[i])) / np.std(target[i])).type(self.params['dtype']).to(device=self.params['cuda'])
+                    else:
+                        J[i] = torch.tensor(target[i]).type(self.params['dtype']).to(device=self.params['cuda'])
+                    
+                    Jsize[i] = target[i].shape
+                    if self.params['dx'] == None:
+                        Jspacing[i] = np.ones((3,)).astype(np.float32)
+                    else:
+                        Jspacing[i] = self.params['dx']
+            else:
+                print('ERROR: received list of unhandled type for target image.')
+                return -1
         
         # load costmask if the variable exists
         if isinstance(costmask, str):
@@ -250,7 +364,7 @@ class LDDMM:
             return -1
         #elif Ispacing[0] != Jspacing[0] or Ispacing[1] != Jspacing[1] or Ispacing[2] != Jspacing[2]
         #elif np.sum(Ispacing==Jspacing) < len(I.shape):
-        elif not all([list(x == Ispacing[0]) for x in Ispacing+Jspacing+Kspacing]):
+        elif self.params['dx'] is None and not all([list(x == Ispacing[0]) for x in Ispacing+Jspacing+Kspacing]):
             print('ERROR: the image pixel spacings are not the same.\n')
             return -1
         else:
@@ -724,11 +838,11 @@ class LDDMM:
         flag = False
         if len(self.EAll) > 1:
             if self.params['optimizer'] == 'gdr':
-                if self.params['checkaffinestep'] == 0:
+                if self.params['checkaffinestep'] == 0 or self.params['doaffine'] == 0:
                     # energy increased
                     if self.EAll[-1] > self.EAll[-2]:
                         self.GDBeta *= 0.7
-                else:
+                elif self.params['checkaffinestep'] == 1 and self.params['doaffine'] == 1:
                     # if diffeo energy increased
                     if self.ERAll[-1] + self.EMDiffeo[-1] > self.EAll[-2]:
                         self.GDBeta *= 0.8
@@ -1152,7 +1266,7 @@ class LDDMM:
             end_time = time.time()
             if it > 0:
                 #print('iter: ' + str(it) + ', E = ' + str(E.item()) + ', ER = ' + str(ER.item()) + ', EM = ' + str(EM.item()) + ', ep = ' + str((self.GDBeta*self.params['epsilon']).item()) + ', time = ' + str(end_time-start_time) + '.')
-                if self.params['checkaffinestep'] == 1:
+                if self.params['checkaffinestep'] == 1 and self.params['doaffine'] == 1:
                     print("iter: " + str(it) + ", E= {:.3f}, ER= {:.3f}, EM= {:.3f}, epd= {:.3f}, del_Ev= {:.4f}, del_El= {:.4f}, del_Et= {:.4f}, time= {:.2f}.".format(E.item(),ER.item(),EM.item(),(self.GDBeta*self.params['epsilon']).item(),self.ERAll[-1] + self.EMDiffeo[-1] - self.EAll[-2], self.EMAffineR[-1] - self.EMDiffeo[-1], self.EMAffineT[-1] - self.EMAffineR[-1],end_time-start_time))
                 else:
                     print("iter: " + str(it) + ", E= {:.3f}, ER= {:.3f}, EM= {:.3f}, epd= {:.3f}, time= {:.2f}.".format(E.item(),ER.item(),EM.item(),(self.GDBeta*self.params['epsilon']).item(),end_time-start_time))

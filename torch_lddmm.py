@@ -8,7 +8,7 @@ sys.path.insert(0,'/cis/home/leebc/Software/')
 import nibabel as nib
 
 class LDDMM:
-    def __init__(self,template=None,target=None,costmask=None,outdir='./',gpu_number=0,a=5.0,p=2,niter=100,epsilon=5e-3,epsilonL=1.0e-7,epsilonT=2.0e-5,sigma=2.0,sigmaR=1.0,nt=5,doaffine=0,checkaffinestep=1,optimizer='gd',maxclimbcount=3,savebestv=False,minenergychange = 0.000001,minbeta=1e-6,dtype='float',im_norm_ms=0,slice_alignment=0,energy_fraction=0.02,energy_fraction_from=0,cc=0,cc_channels=[],we=0,dx=None):
+    def __init__(self,template=None,target=None,costmask=None,outdir='./',gpu_number=0,a=5.0,p=2,niter=100,epsilon=5e-3,epsilonL=1.0e-7,epsilonT=2.0e-5,sigma=2.0,sigmaR=1.0,nt=5,doaffine=0,checkaffinestep=1,optimizer='gd',maxclimbcount=3,savebestv=False,minenergychange = 0.000001,minbeta=1e-6,dtype='float',im_norm_ms=0,slice_alignment=0,energy_fraction=0.02,energy_fraction_from=0,cc=0,cc_channels=[],we=0,we_channels=[],sigmaW=1.0,nMstep=5,dx=None):
         self.params = {}
         self.params['gpu_number'] = gpu_number
         self.params['a'] = float(a)
@@ -41,6 +41,9 @@ class LDDMM:
         self.params['cc'] = cc
         self.params['cc_channels'] = cc_channels
         self.params['we'] = we
+        self.params['we_channels'] = we_channels
+        self.params['sigmaW'] = sigmaW
+        self.params['nMstep'] = nMstep
         self.params['dx'] = dx
         dtype_dict = {}
         dtype_dict['float'] = 'torch.FloatTensor'
@@ -69,7 +72,10 @@ class LDDMM:
         print('>    energy_fraction = ' + str(energy_fraction) + ' (fraction of initial energy at which to stop)')
         print('>    cc              = ' + str(cc) + ' (contrast correction: 0 = no, 1 = yes)')
         print('>    cc_channels     = ' + str(cc_channels) + ' (image channels to run contrast correction (0-indexed))')
-        print('>    we              = ' + str(we) + ' (weight estimation: 0 = no, 1 = yes)')
+        print('>    we              = ' + str(we) + ' (weight estimation: 0 = no, 1+ = yes)')
+        print('>    we_channels     = ' + str(we_channels) + ' (image channels to run weight estimation (0-indexed))')
+        print('>    sigmaW          = ' + str(sigmaW) + ' (coefficient for each weight estimation class)')
+        print('>    nMstep          = ' + str(nMstep) + ' (update weight estimation every nMstep steps)')
         print('>    costmask        = ' + str(costmask) + ' (costmask file name)')
         print('>    outdir          = ' + str(outdir) + ' (output directory name)')
         if optimizer in optimizer_dict:
@@ -165,11 +171,11 @@ class LDDMM:
             else:
                 self.params['cuda'] = 'cuda:' + str(self.params['gpu_number'])
         
-        number_list = ['a','p','niter','epsilon','sigmaR','nt','doaffine','epsilonL','epsilonT','im_norm_ms','slice_alignment','energy_fraction','energy_fraction_from','cc','we']
+        number_list = ['a','p','niter','epsilon','sigmaR','nt','doaffine','epsilonL','epsilonT','im_norm_ms','slice_alignment','energy_fraction','energy_fraction_from','cc','we','nMstep']
         string_list = ['outdir','optimizer']
         stringornone_list = ['costmask']
         stringorlist_list = ['template','target'] # or array, actually
-        numberorlist_list = ['sigma','cc_channels']
+        numberorlist_list = ['sigma','cc_channels','we_channels','sigmaW']
         noneorarrayorlist_list = ['dx']
         for i in range(len(number_list)):
             if not isinstance(self.params[number_list[i]], (int, float)):
@@ -240,6 +246,24 @@ class LDDMM:
             if max(self.params['cc_channels']) > max(channel_set):
                 print('ERROR: one or more of the contrast correction channels is greater than the number of image channels.')
                 flag = -1
+        
+        # check weight estimation channels
+        if isinstance(self.params['we_channels'],(int,float)):
+            self.params['we_channels'] = [int(self.params['we_channels'])]
+        elif isinstance(self.params['we_channels'],list):
+            if len(self.params['we_channels']) == 0:
+                self.params['we_channels'] = list(range(max(channel_set)))
+            
+            if max(self.params['we_channels']) > max(channel_set):
+                print('ERROR: one or more of the weight estimation channels is greater than the number of image channels.')
+                flag = -1
+        
+        # check weight estimation sigmas
+        if len(self.params['sigmaW']) == 1:
+            self.params['sigmaW'] = self.params['sigmaW']*int(self.params['we'])
+        elif len(self.params['sigmaW']) != int(self.params['we']):
+            print('ERROR: length of weight estimation sigma list must be either 1 or equal to parameter \'we\'.')
+            flag = -1
         
         # optimizer flags
         if self.params['optimizer'] == 'gdw':
@@ -373,7 +397,7 @@ class LDDMM:
             if costmask is not None:
                 self.M = K[0]
             else:
-                self.M = torch.tensor(np.ones(I[0].shape)).type(self.params['dtype']).to(device=self.params['cuda'])
+                self.M = torch.tensor(np.ones(I[0].shape)).type(self.params['dtype']).to(device=self.params['cuda']) # this could be initialized to a scalar 1.0 to save memory, if you do this make sure you check computeLinearContrastCorrection to see whether or not you are using torch.sum(w*self.M)
             
             self.dx = list(Ispacing[0])
             self.dx = [float(x) for x in self.dx]
@@ -509,6 +533,19 @@ class LDDMM:
             self.ccJbar.append(0.0)
             self.ccVarI.append(1.0)
             self.ccCovIJ.append(1.0)
+        
+        # weight estimation variables
+        self.W = [[] for i in range(len(self.I))]
+        self.we_C = [[] for i in range(len(self.I))]
+        for i in range(self.params['we']):
+            if i == 0: # first index is the matching channel, the rest is artifacts
+                for ii in self.params['we_channels']: # allocate space only for the desired channels
+                    self.W[ii].append(torch.tensor(0.9*np.ones((self.nx[0],self.nx[1],self.nx[2]))).type(self.params['dtype']).to(device=self.params['cuda']))
+                    self.we_C[ii].append(torch.tensor(1.0).type(self.params['dtype']).to(device=self.params['cuda']))
+            else:
+                for ii in self.params['we_channels']:
+                    self.W[ii].append(torch.tensor(0.1*np.ones((self.nx[0],self.nx[1],self.nx[2]))).type(self.params['dtype']).to(device=self.params['cuda']))
+                    self.we_C[ii].append(torch.tensor(1.0).type(self.params['dtype']).to(device=self.params['cuda']))
         
     # initialize lddmm variables
     def initializeVariables2d(self):
@@ -709,8 +746,7 @@ class LDDMM:
         return self.It,phiinv0_gpu, phiinv1_gpu
     
     # deform template forward using affine transform
-    # TODO: can this be combined with forwardDeformation() for speed? then would I remove det(A) from the gradient?
-    # TODO: this could be vectorized by stacking X0, X1, X2
+    # this could be vectorized by stacking X0, X1, X2
     def forwardDeformationAffine(self,affineA,phiinv0_gpu,phiinv1_gpu,phiinv2_gpu):
         affineB = torch.inverse(affineA)
         
@@ -769,17 +805,46 @@ class LDDMM:
         return phiinv0_gpu, phiinv1_gpu, phiinv2_gpu
     
     # compute contrast correction values
-    def computeContrastTransform(self,I,J):
-        Ibar = torch.sum(I)/np.prod(I.shape)
-        Jbar = torch.sum(J)/np.prod(J.shape)
-        VarI = torch.sum((I-Ibar)**2)/np.prod(I.shape)
-        CovIJ = torch.sum((I-Ibar)*(J-Jbar))/np.prod(J.shape)
+    def computeLinearContrastTransform(self,I,J,weight=1.0):
+        Ibar = torch.sum(I*weight*self.M)/torch.sum(weight*self.M)
+        Jbar = torch.sum(J*weight*self.M)/torch.sum(weight*self.M)
+        VarI = torch.sum(((I-Ibar)*weight*self.M)**2)/torch.sum(weight*self.M)
+        CovIJ = torch.sum((I-Ibar)*(J-Jbar)*weight*self.M)/torch.sum(weight*self.M)
         return Ibar, Jbar, VarI, CovIJ
     
     # contrast correction convenience function
     def runContrastCorrection(self):
         for i in self.params['cc_channels']:
-            self.ccIbar[i],self.ccJbar[i],self.ccVarI[i],self.ccCovIJ[i] = self.computeContrastTransform(self.It[i][-1], self.J[i])
+            if i in self.params['we_channels'] and self.params['we'] != 0:
+                self.ccIbar[i],self.ccJbar[i],self.ccVarI[i],self.ccCovIJ[i] = self.computeLinearContrastTransform(self.It[i][-1], self.J[i],self.W[i][0])
+            else:
+                self.ccIbar[i],self.ccJbar[i],self.ccVarI[i],self.ccCovIJ[i] = self.computeLinearContrastTransform(self.It[i][-1], self.J[i])
+        
+        return
+    
+    # compute weight estimation
+    def computeWeightEstimation(self):
+        for ii in range(self.params['we']):
+            for i in range(len(self.I)):
+                if i in self.params['we_channels']:
+                    if ii == 0:
+                        self.W[i][ii] = 1.0/np.sqrt(2.0*np.pi*self.params['sigma'][i]**2) * torch.exp(-1.0/2.0/self.params['sigma'][i]**2 * (((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2)
+                    else:
+                        self.W[i][ii] = 1.0/np.sqrt(2.0*np.pi*self.params['sigmaW'][ii]**2) * torch.exp(-1.0/2.0/self.params['sigmaW'][ii]**2 * (self.we_C[i][ii] - self.J[i])**2)
+        
+        for i in range(len(self.I)):
+            Wsum = torch.sum(torch.stack(self.W[i],3),3) + 1.0e-6
+            for ii in range(self.params['we']):
+                self.W[i][ii] = self.W[i][ii] / Wsum
+        
+        return
+    
+    # update weight estimation constants
+    def updateWeightEstimationConstants(self):
+        for i in range(len(self.I)):
+            if i in self.params['we_channels']:
+                for ii in range(self.params['we']):
+                    self.we_C[i][ii] = torch.sum(self.W[i][ii] * self.J[i]) / torch.sum(self.W[i][ii] + 1.0e-6)
         
         return
     
@@ -805,9 +870,23 @@ class LDDMM:
     def calculateMatchingEnergyMSE(self):
         lambda1 = [None]*len(self.I)
         EM = 0
-        for i in range(len(self.I)):
-            lambda1[i] = -1*self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])/self.params['sigma'][i]**2 # may not need to store this
-            EM += torch.sum(self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
+        if self.params['we'] == 0:
+            for i in range(len(self.I)):
+                lambda1[i] = -1*self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])/self.params['sigma'][i]**2 # may not need to store this
+                EM += torch.sum(self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
+        else:
+            for i in range(len(self.I)):
+                if i in self.params['we_channels']:
+                    for ii in range(self.params['we']):
+                        if ii == 0:
+                            lambda1[i] = -1*self.W[i][ii]*self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])/self.params['sigma'][i]**2
+                            EM += torch.sum(self.W[i][ii]*self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
+                        else:
+                            EM += torch.sum(self.W[i][ii]*self.M*( self.we_C[i][ii] - self.J[i])**2/(2.0*self.params['sigmaW'][ii]**2))*self.dx[0]*self.dx[1]*self.dx[2]
+                else:
+                    lambda1[i] = -1*self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])/self.params['sigma'][i]**2 # may not need to store this
+                    EM += torch.sum(self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
+        
         return lambda1, EM
     
     # compute matching energy
@@ -822,8 +901,20 @@ class LDDMM:
     # compute matching energy without lambda1
     def calculateMatchingEnergyMSEOnly(self, I):
         EM = 0
-        for i in range(len(self.I)):
-            EM += torch.sum(self.M*( ((I[i] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
+        if self.params['we'] == 0:
+            for i in range(len(self.I)):
+                EM += torch.sum(self.M*( ((I[i] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
+        else:
+            for i in range(len(self.I)):
+                if i in self.params['we_channels']:
+                    for ii in range(self.params['we']):
+                        if ii == 0:
+                            EM += torch.sum(self.W[i][ii]*self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
+                        else:
+                            EM += torch.sum(self.W[i][ii]*self.M*( self.we_C[i][ii] - self.J[i])**2/(2.0*self.params['sigmaW'][ii]**2))*self.dx[0]*self.dx[1]*self.dx[2]
+                else:
+                    EM += torch.sum(self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
+            
         return EM
     
     # compute matching energy without lambda1
@@ -886,7 +977,6 @@ class LDDMM:
     
     
     # compute gradient of affine transformation
-    # TODO: can i change the order of diffeo and A to remove one image gradient calculation?
     def calculateGradientA(self,affineA,lambda1):
         affineB = torch.inverse(affineA)
         gi_x = [None]*len(self.I)
@@ -904,8 +994,6 @@ class LDDMM:
                     #AdABX = AdAB[0,0]*self.X0 + AdAB[0,1]*self.X1 + AdAB[0,2]*self.X2 + AdAB[0,3]
                     #AdABY = AdAB[1,0]*self.X0 + AdAB[1,1]*self.X1 + AdAB[1,2]*self.X2 + AdAB[1,3]
                     #AdABZ = AdAB[2,0]*self.X0 + AdAB[2,1]*self.X1 + AdAB[2,2]*self.X2 + AdAB[2,3]
-                    # check if using lambda1 is faster
-                    # TODO: this product has major bit depth issues, order of magnitude difference in gradient
                     if i == 0:
                         self.gradA[r,c] = torch.sum( lambda1[i] * ( gi_x[i]*(AdAB[0,0]*self.X0 + AdAB[0,1]*self.X1 + AdAB[0,2]*self.X2 + AdAB[0,3]) + gi_y[i]*(AdAB[1,0]*self.X0 + AdAB[1,1]*self.X1 + AdAB[1,2]*self.X2 + AdAB[1,3]) + gi_z[i]*(AdAB[2,0]*self.X0 + AdAB[2,1]*self.X1 + AdAB[2,2]*self.X2 + AdAB[2,3]) ) ) * self.dx[0]*self.dx[1]*self.dx[2]
                     else:
@@ -1246,6 +1334,10 @@ class LDDMM:
                 if self.params['cc'] == 1:
                     self.runContrastCorrection()
                 
+                # update weight estimation
+                if self.params['we'] > 0 and np.mod(it,self.params['nMstep']) == 0:
+                    self.computeWeightEstimation()
+                
                 ER = self.calculateRegularizationEnergyVt()
                 lambda1,EM = self.calculateMatchingEnergyMSE()
             
@@ -1298,6 +1390,11 @@ class LDDMM:
             # update affine
             if self.params['doaffine'] == 1:
                 self.updateAffine()
+            
+            # update weight estimation
+            if self.params['we'] > 0 and np.mod(it,self.params['nMstep']) == 0:
+                #self.computeWeightEstimation()
+                self.updateWeightEstimationConstants()
             
     
     

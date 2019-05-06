@@ -130,7 +130,7 @@ class LDDMM:
         else:
             self.initializer_flags['lddmm'] = 0
         
-        if self.params['do_affine'] == 1:
+        if self.params['do_affine'] > 0:
             self.initializer_flags['affine'] = 1
         else:
             self.initializer_flags['affine'] = 0
@@ -318,7 +318,7 @@ class LDDMM:
             self.params['savebestv'] = True
         
         # set timesteps to 1 if doing affine only
-        if self.params['do_affine'] == 1 and self.params['do_lddmm'] == 0:
+        if self.params['do_affine'] > 0 and self.params['do_lddmm'] == 0:
             if self.params['nt'] != 1:
                 print('WARNING: nt set to 1 because settings indicate affine registration only.')
                 self.params['nt'] = 1
@@ -627,89 +627,6 @@ class LDDMM:
         self.initializer_flags['cc'] = 0
         self.initializer_flags['we'] = 0
     
-    '''
-    # initialize affine variables
-    def initializeVariablesAffine(self):
-        # helper variables
-        self.dt = 1.0/self.params['nt']
-        # loss values
-        self.EMAll = []
-        self.ERAll = []
-        self.EAll = []
-        if self.params['checkaffinestep'] == 1:
-            self.EMAffineR = []
-            self.EMAffineT = []
-            self.EMDiffeo = []
-        
-        # image sampling domain
-        x0 = np.arange(self.nx[0])*self.dx[0]
-        x1 = np.arange(self.nx[1])*self.dx[1]
-        x2 = np.arange(self.nx[2])*self.dx[2]
-        X0,X1,X2 = np.meshgrid(x0,x1,x2,indexing='ij')
-        self.X0 = torch.tensor(X0).type(self.params['dtype']).to(device=self.params['cuda'])
-        self.X1 = torch.tensor(X1).type(self.params['dtype']).to(device=self.params['cuda'])
-        self.X2 = torch.tensor(X2).type(self.params['dtype']).to(device=self.params['cuda'])
-        # 2D sampling domain for slice alignment
-        #if self.params['slice_alignment'] == 1:
-        
-        # v and I
-        if self.params['gpu_number'] is not None:
-            if self.initializer_flags['load'] == 1:
-                self.initializer_flags['load'] = 0
-                self.It = [ [None]*(self.params['nt']+1) for i in range(len(self.I)) ]
-                for ii in range(len(self.I)):
-                    # NOTE: you cannot use pointers / list multiplication for cuda tensors if you want actual copies
-                    #self.It.append(torch.tensor(self.I[:,:,:]).type(self.params['dtype']).cuda())
-                    for i in range(1):
-                        if i == 0:
-                            self.It[ii][i] = self.I[ii]
-                        else:
-                            self.It[ii][i] = torch.tensor(self.I[ii][:,:,:]).type(self.params['dtype']).cuda()
-        else:
-            if self.initializer_flags['load'] == 1:
-                self.initializer_flags['load'] = 0
-                self.It = [ [None]*(self.params['nt']+1) for i in range(len(self.I)) ]
-                for ii in range(1):
-                    # NOTE: you cannot use pointers / list multiplication for cuda tensors if you want actual copies
-                    #self.It.append(torch.tensor(self.I[:,:,:]).type(self.params['dtype']).cuda())
-                    for i in range(self.params['nt']+1):
-                        self.It[ii][i] = torch.tensor(self.I[ii][:,:,:]).type(self.params['dtype'])
-        
-        # affine parameters
-        if self.initializer_flags['affine'] == 1:
-            self.initializer_flags['affine'] = 0
-            self.affineA = torch.tensor(np.eye(4)).type(self.params['dtype']).to(device=self.params['cuda'])
-            self.lastaffineA = torch.tensor(np.eye(4)).type(self.params['dtype']).to(device=self.params['cuda'])
-            self.gradA = torch.tensor(np.zeros((4,4))).type(self.params['dtype']).to(device=self.params['cuda'])
-        
-        # contrast correction variables
-        if not hasattr(self,'ccIbar') or self.initializer_flags['cc'] == 1:
-            self.initializer_flags['cc'] = 0
-            self.ccIbar = []
-            self.ccJbar = []
-            self.ccVarI = []
-            self.ccCovIJ = []
-            for i in range(len(self.I)):
-                self.ccIbar.append(0.0)
-                self.ccJbar.append(0.0)
-                self.ccVarI.append(1.0)
-                self.ccCovIJ.append(1.0)
-        
-        # weight estimation variables
-        if self.initializer_flags['we'] == 1: # if number of channels changed, reset everything
-            self.initializer_flags['we'] = 0
-            self.W = [[] for i in range(len(self.I))]
-            self.we_C = [[] for i in range(len(self.I))]
-            for i in range(self.params['we']):
-                if i == 0: # first index is the matching channel, the rest is artifacts
-                    for ii in self.params['we_channels']: # allocate space only for the desired channels
-                        self.W[ii].append(torch.tensor(0.9*np.ones((self.nx[0],self.nx[1],self.nx[2]))).type(self.params['dtype']).to(device=self.params['cuda']))
-                        self.we_C[ii].append(torch.tensor(1.0).type(self.params['dtype']).to(device=self.params['cuda']))
-                else:
-                    for ii in self.params['we_channels']:
-                        self.W[ii].append(torch.tensor(0.1*np.ones((self.nx[0],self.nx[1],self.nx[2]))).type(self.params['dtype']).to(device=self.params['cuda']))
-                        self.we_C[ii].append(torch.tensor(1.0).type(self.params['dtype']).to(device=self.params['cuda']))
-    '''
     
     # initialize lddmm variables
     def initializeVariables2d(self):
@@ -826,7 +743,7 @@ class LDDMM:
                 phiinv2_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv2_gpu-self.X2).unsqueeze(0).unsqueeze(0),torch.stack(((self.X2-self.vt2[t]*self.dt)/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,(self.X1-self.vt1[t]*self.dt)/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,(self.X0-self.vt0[t]*self.dt)/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0),padding_mode='border')) + (self.X2-self.vt2[t]*self.dt)
             
             # do affine transforms
-            if t == self.params['nt']-1 and (self.params['do_affine'] == 1 or (hasattr(self, 'affineA') and not torch.all(torch.eq(self.affineA,torch.tensor(np.eye(4)).type(self.params['dtype']).to(device=self.params['cuda']))) ) ): # run this if do_affine == 1 or affineA exists and isn't identity
+            if t == self.params['nt']-1 and (self.params['do_affine'] > 0 or (hasattr(self, 'affineA') and not torch.all(torch.eq(self.affineA,torch.tensor(np.eye(4)).type(self.params['dtype']).to(device=self.params['cuda']))) ) ): # run this if do_affine == 1 or affineA exists and isn't identity
                 if self.params['checkaffinestep'] == 1:
                     # new diffeo with old affine
                     phiinv0_temp,phiinv1_temp,phiinv2_temp = self.forwardDeformationAffineVectorized(self.lastaffineA,phiinv0_gpu,phiinv1_gpu,phiinv2_gpu)
@@ -871,7 +788,7 @@ class LDDMM:
                 phiinv1_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv1_gpu-self.X1).unsqueeze(0).unsqueeze(0),torch.stack(((self.X2-self.vt2[t]*self.dt)/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,(self.X1-self.vt1[t]*self.dt)/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,(self.X0-self.vt0[t]*self.dt)/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0),padding_mode='border')) + (self.X1-self.vt1[t]*self.dt)
                 phiinv2_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv2_gpu-self.X2).unsqueeze(0).unsqueeze(0),torch.stack(((self.X2-self.vt2[t]*self.dt)/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,(self.X1-self.vt1[t]*self.dt)/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,(self.X0-self.vt0[t]*self.dt)/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0),padding_mode='border')) + (self.X2-self.vt2[t]*self.dt)
             
-            if t == self.params['nt']-1 and (self.params['do_affine'] == 1  or (hasattr(self, 'affineA') and not torch.all(torch.eq(self.affineA,torch.tensor(np.eye(4)).type(self.params['dtype']).to(device=self.params['cuda']))) ) ): # run this if do_affine == 1 or affineA exists and isn't identity
+            if t == self.params['nt']-1 and (self.params['do_affine'] > 0  or (hasattr(self, 'affineA') and not torch.all(torch.eq(self.affineA,torch.tensor(np.eye(4)).type(self.params['dtype']).to(device=self.params['cuda']))) ) ): # run this if do_affine == 1 or affineA exists and isn't identity
                 phiinv0_gpu,phiinv1_gpu,phiinv2_gpu = self.forwardDeformationAffineVectorized(self.affineA,phiinv0_gpu,phiinv1_gpu,phiinv2_gpu)
             
             # deform the image
@@ -1099,7 +1016,7 @@ class LDDMM:
                     # energy increased
                     if self.EAll[-1] > self.EAll[-2]:
                         self.GDBeta *= 0.7
-                elif self.params['checkaffinestep'] == 1 and self.params['do_affine'] == 1:
+                elif self.params['checkaffinestep'] == 1 and self.params['do_affine'] > 0:
                     # if diffeo energy increased
                     if self.ERAll[-1] + self.EMDiffeo[-1] > self.EAll[-2]:
                         self.GDBeta *= 0.8
@@ -1646,7 +1563,7 @@ class LDDMM:
             end_time = time.time()
             if it > 0:
                 #print('iter: ' + str(it) + ', E = ' + str(E.item()) + ', ER = ' + str(ER.item()) + ', EM = ' + str(EM.item()) + ', ep = ' + str((self.GDBeta*self.params['epsilon']).item()) + ', time = ' + str(end_time-start_time) + '.')
-                if self.params['checkaffinestep'] == 1 and self.params['do_affine'] == 1:
+                if self.params['checkaffinestep'] == 1 and self.params['do_affine'] > 0:
                     print("iter: " + str(it) + ", E= {:.3f}, ER= {:.3f}, EM= {:.3f}, epd= {:.3f}, del_Ev= {:.4f}, del_El= {:.4f}, del_Et= {:.4f}, time= {:.2f}.".format(E.item(),ER.item(),EM.item(),(self.GDBeta*self.params['epsilon']).item(),self.ERAll[-1] + self.EMDiffeo[-1] - self.EAll[-2], self.EMAffineR[-1] - self.EMDiffeo[-1], self.EMAffineT[-1] - self.EMAffineR[-1],end_time-start_time))
                 else:
                     print("iter: " + str(it) + ", E= {:.3f}, ER= {:.3f}, EM= {:.3f}, epd= {:.3f}, time= {:.2f}.".format(E.item(),ER.item(),EM.item(),(self.GDBeta*self.params['epsilon']).item(),end_time-start_time))
@@ -1672,13 +1589,15 @@ class LDDMM:
             # calculate affine gradient
             if self.params['do_affine'] == 1:
                 self.calculateGradientA(self.affineA,lambda1)
+            elif self.params['do_affine'] == 2:
+                self.calculateGradientA(self.affineA,lambda1,mode='rigid')
             
             # calculate and update gradients
             if self.params['do_lddmm'] == 1:
                 self.calculateAndUpdateGradientsVt(lambda1)
             
             # update affine
-            if self.params['do_affine'] == 1:
+            if self.params['do_affine'] > 0:
                 self.updateAffine()
             
             # update weight estimation
@@ -1760,6 +1679,10 @@ class LDDMM:
             del self.X2
         if hasattr(self,'Khat'):
             del self.Khat
+        if hasattr(self,'saX0'):
+            del self.saX0
+        if hasattr(self,'saX1'):
+            del self.saX1
 
         self.initializer_flags['lddmm'] = 1
         self.initializer_flags['affine'] = 1

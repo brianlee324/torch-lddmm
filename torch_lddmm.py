@@ -15,7 +15,7 @@ def mygaussian(sigma=1,size=5):
     return out_mat
 
 class LDDMM:
-    def __init__(self,template=None,target=None,costmask=None,outdir='./',gpu_number=0,a=5.0,p=2,niter=100,epsilon=5e-3,epsilonL=1.0e-7,epsilonT=2.0e-5,sigma=2.0,sigmaR=1.0,nt=5,do_lddmm=1,do_affine=0,checkaffinestep=1,optimizer='gd',maxclimbcount=3,savebestv=False,minenergychange = 0.000001,minbeta=1e-6,dtype='float',im_norm_ms=0,slice_alignment=0,energy_fraction=0.02,energy_fraction_from=0,cc=0,cc_channels=[],we=0,we_channels=[],sigmaW=1.0,nMstep=5,dx=None):
+    def __init__(self,template=None,target=None,costmask=None,outdir='./',gpu_number=0,a=5.0,p=2,niter=100,epsilon=5e-3,epsilonL=1.0e-7,epsilonT=2.0e-5,sigma=2.0,sigmaR=1.0,nt=5,do_lddmm=1,do_affine=0,checkaffinestep=0,optimizer='gd',maxclimbcount=3,savebestv=False,minenergychange = 0.000001,minbeta=1e-6,dtype='float',im_norm_ms=0,slice_alignment=0,energy_fraction=0.02,energy_fraction_from=0,cc=0,cc_channels=[],we=0,we_channels=[],sigmaW=1.0,nMstep=5,dx=None):
         self.params = {}
         self.params['gpu_number'] = gpu_number
         self.params['a'] = float(a)
@@ -86,7 +86,6 @@ class LDDMM:
         print('>    we_channels     = ' + str(we_channels) + ' (image channels to run weight estimation (0-indexed))')
         print('>    sigmaW          = ' + str(sigmaW) + ' (coefficient for each weight estimation class)')
         print('>    nMstep          = ' + str(nMstep) + ' (update weight estimation every nMstep steps)')
-        print('>    costmask        = ' + str(costmask) + ' (costmask file name)')
         print('>    outdir          = ' + str(outdir) + ' (output directory name)')
         if optimizer in optimizer_dict:
             print('>    optimizer       = ' + str(optimizer_dict[optimizer]) + ' (optimizer type)')
@@ -122,6 +121,11 @@ class LDDMM:
             print(myprintstring)
         else:
             print('>    target          = ' + str(target) + '\n')
+        
+        if isinstance(costmask,np.ndarray):
+            print('>    costmask        = numpy.ndarray (costmask file name or numpy.ndarray)')
+        else:
+            print('>    costmask        = ' + str(costmask) + ' (costmask file name or numpy.ndarray)')
         
         self.initializer_flags = {}
         self.initializer_flags['load'] = 1
@@ -221,7 +225,7 @@ class LDDMM:
         
         number_list = ['a','p','niter','epsilon','sigmaR','nt','do_lddmm','do_affine','epsilonL','epsilonT','im_norm_ms','slice_alignment','energy_fraction','energy_fraction_from','cc','we','nMstep']
         string_list = ['outdir','optimizer']
-        stringornone_list = ['costmask']
+        stringornone_list = ['costmask'] # or array, actually
         stringorlist_list = ['template','target'] # or array, actually
         numberorlist_list = ['sigma','cc_channels','we_channels','sigmaW']
         noneorarrayorlist_list = ['dx']
@@ -236,7 +240,7 @@ class LDDMM:
                 print('ERROR: ' + string_list[i] + ' must be a string.')
         
         for i in range(len(stringornone_list)):
-            if not isinstance(self.params[stringornone_list[i]], str) and self.params[stringornone_list[i]] is not None:
+            if not isinstance(self.params[stringornone_list[i]], (str,np.ndarray)) and self.params[stringornone_list[i]] is not None:
                 flag = -1
                 print('ERROR: ' + stringornone_list[i] + ' must be a string or None.')
         
@@ -436,6 +440,16 @@ class LDDMM:
             Ksize = [None]
             # never normalize cost mask
             K[0],Kspacing[0],Ksize[0] = self.loadImage(costmask,im_norm_ms=0)
+        elif isinstance(costmask,np.ndarray):
+            K = [None]
+            Kspacing = [None]
+            Ksize = [None]
+            K[0] = torch.tensor(costmask).type(self.params['dtype']).to(device=self.params['cuda'])
+            Ksize[0] = costmask.shape
+            if self.params['dx'] == None:
+                Kspacing[0] = np.ones((3,)).astype(np.float32)
+            else:
+                Kspacing[0] = self.params['dx']
         else:
             K = []
             Kspacing = []
@@ -561,7 +575,10 @@ class LDDMM:
                         if i == 0:
                             self.It[ii][i] = self.I[ii]
                         else:
-                            self.It[ii][i] = torch.tensor(self.I[ii][:,:,:]).type(self.params['dtype']).cuda()
+                            if isinstance(self.I[ii],torch.Tensor):
+                                self.It[ii][i] = self.I[ii][:,:,:].clone().type(self.params['dtype']).cuda()
+                            else:
+                                self.It[ii][i] = torch.tensor(self.I[ii][:,:,:]).type(self.params['dtype']).cuda()
         else:
             if not hasattr(self,'vt0') and self.initializer_flags['lddmm'] == 1:
                 self.vt0 = []
@@ -1580,20 +1597,24 @@ class LDDMM:
             # print function
             if it > 0:
                 start_time = end_time
+            else:
+                total_time = 0.0
             
             end_time = time.time()
             if it > 0:
+                total_time += end_time-start_time
                 #print('iter: ' + str(it) + ', E = ' + str(E.item()) + ', ER = ' + str(ER.item()) + ', EM = ' + str(EM.item()) + ', ep = ' + str((self.GDBeta*self.params['epsilon']).item()) + ', time = ' + str(end_time-start_time) + '.')
                 if self.params['checkaffinestep'] == 1 and self.params['do_affine'] > 0:
-                    print("iter: " + str(it) + ", E= {:.3f}, ER= {:.3f}, EM= {:.3f}, epd= {:.3f}, del_Ev= {:.4f}, del_El= {:.4f}, del_Et= {:.4f}, time= {:.2f}.".format(E.item(),ER.item(),EM.item(),(self.GDBeta*self.params['epsilon']).item(),self.ERAll[-1] + self.EMDiffeo[-1] - self.EAll[-2], self.EMAffineR[-1] - self.EMDiffeo[-1], self.EMAffineT[-1] - self.EMAffineR[-1],end_time-start_time))
+                    print("iter: " + str(it) + ", E= {:.3f}, ER= {:.3f}, EM= {:.3f}, epd= {:.3f}, del_Ev= {:.4f}, del_El= {:.4f}, del_Et= {:.4f}, time= {:.2f}s.".format(E.item(),ER.item(),EM.item(),(self.GDBeta*self.params['epsilon']).item(),self.ERAll[-1] + self.EMDiffeo[-1] - self.EAll[-2], self.EMAffineR[-1] - self.EMDiffeo[-1], self.EMAffineT[-1] - self.EMAffineR[-1],end_time-start_time))
                 else:
-                    print("iter: " + str(it) + ", E= {:.3f}, ER= {:.3f}, EM= {:.3f}, epd= {:.3f}, time= {:.2f}.".format(E.item(),ER.item(),EM.item(),(self.GDBeta*self.params['epsilon']).item(),end_time-start_time))
+                    print("iter: " + str(it) + ", E= {:.3f}, ER= {:.3f}, EM= {:.3f}, epd= {:.3f}, time= {:.2f}s.".format(E.item(),ER.item(),EM.item(),(self.GDBeta*self.params['epsilon']).item(),end_time-start_time))
             else:
                 #print('iter: ' + str(it) + ', E = ' + str(E.item()) + ', ER = ' + str(ER.item()) + ', EM = ' + str(EM.item()) + ', ep = ' + str((self.GDBeta*self.params['epsilon']).item()) + '.')
                 print("iter: " + str(it) + ", E = {:.4f}, ER = {:.4f}, EM = {:.4f}, epd = {:.6f}.".format(E.item(),ER.item(),EM.item(),(self.GDBeta*self.params['epsilon']).item()))
             
             # or (self.EAll[-1]/self.EAll[-2] < 1-self.params['minenergychange'] and self.EAll[-2]/self.EAll[-3] < 1-self.params['minenergychange'] and self.EAll[-3]/self.EAll[-4] < 1-self.params['minenergychange'] and self.EAll[-4]/self.EAll[-5] < 1-self.params['minenergychange'])
             if it == self.params['niter']-1 or (self.GDBeta < self.params['minbeta'] and self.GDBetaAffineR < self.params['minbeta'] and self.GDBetaAffineT < self.params['minbeta']) or self.EAll[-1]/self.EAll[self.params['energy_fraction_from']] <= self.params['energy_fraction']:
+                print('Total elapsed runtime: {:.2f} seconds.'.format(total_time))
                 break
             
             # update step sizes

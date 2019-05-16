@@ -7,11 +7,11 @@ See ./examples/ directory for example Jupyter notebooks.
 
 ## Features
 This package performs any combination of the following:
-* Multi-channel images [2]
-* Matching cost masking
-* Tandem optimization of affine/rigid and diffeomorphism
-* Image contrast correction [3]
-* Voxelwise weight estimation [3]
+* Multi-channel images [2]  
+* Matching cost masking  
+* Tandem optimization of affine/rigid and diffeomorphism  
+* Image contrast correction [3]  
+* Voxelwise weight estimation [3]  
 * 2D to 3D rigid reference-guided image stack alignment [4]
 
 ## Quick-start guide
@@ -47,32 +47,32 @@ lddmm.run()
 
 
 ### Parameter Guide
-*a               = float (smoothing kernel, a*(pixel_size))
-*p               = int (smoothing kernel power, p*2)
-*niter           = int (number of iterations)
-*epsilon         = float (gradient descent step size)
-*epsilonL        = float (gradient descent step size, affine)
-*epsilonT        = float (gradient descent step size, translation)
-*minbeta         = float (smallest multiple of epsilon)
-*sigma           = float (matching term coefficient (0.5/sigma**2))
-*sigmaR          = float (regularization term coefficient (0.5/sigmaR**2))
-*nt              = int (number of time steps in velocity field)
-*do_lddmm        = 0/1 (perform LDDMM step, 0 = no, 1 = yes)
-*do_affine       = 0/1/2 (interleave linear registration: 0 = no, 1 = affine, 2 = rigid)
-*gpu_number      = int (index of CUDA_VISIBLE_DEVICES to use)
-*dtype           = string (bit depth, 'float' or 'double')
-*energy_fraction = float (fraction of initial energy at which to stop)
-*cc              = 0/1 (contrast correction: 0 = no, 1 = yes)
-*cc_channels     = list (image channels to run contrast correction (0-indexed))
-*we              = 0/2/3/... (weight estimation: 0 = no, 2+ = yes)
-*we_channels     = list (image channels to run weight estimation (0-indexed))
-*sigmaW          = float (coefficient for each weight estimation class)
-*nMstep          = int (update weight estimation every nMstep steps)
-*costmask        = None or numpy.ndarray (costmask image)
-*outdir          = string (output directory name)
-*optimizer       = string (optimizer type 'gd' for gradient descent or 'gdr' for gradient descent with shrinking step size)
-*template        = numpy.ndarray or list of numpy.ndarray
-*target          = numpy.ndarray or list of numpy.ndarray
+*a               = float (smoothing kernel, a*(pixel_size))  
+*p               = int (smoothing kernel power, p*2)  
+*niter           = int (number of iterations)  
+*epsilon         = float (gradient descent step size)  
+*epsilonL        = float (gradient descent step size, affine)  
+*epsilonT        = float (gradient descent step size, translation)  
+*minbeta         = float (smallest multiple of epsilon)  
+*sigma           = float (matching term coefficient (0.5/sigma**2))  
+*sigmaR          = float (regularization term coefficient (0.5/sigmaR**2))  
+*nt              = int (number of time steps in velocity field)  
+*do_lddmm        = 0/1 (perform LDDMM step, 0 = no, 1 = yes)  
+*do_affine       = 0/1/2 (interleave linear registration: 0 = no, 1 = affine, 2 = rigid)  
+*gpu_number      = int (index of CUDA_VISIBLE_DEVICES to use)  
+*dtype           = string (bit depth, 'float' or 'double')  
+*energy_fraction = float (fraction of initial energy at which to stop)  
+*cc              = 0/1 (contrast correction: 0 = no, 1 = yes)  
+*cc_channels     = list (image channels to run contrast correction (0-indexed))  
+*we              = 0/2/3/... (weight estimation: 0 = no, 2+ = yes)  
+*we_channels     = list (image channels to run weight estimation (0-indexed))  
+*sigmaW          = float (coefficient for each weight estimation class)  
+*nMstep          = int (update weight estimation every nMstep steps)  
+*costmask        = None or numpy.ndarray (costmask image)  
+*outdir          = string (output directory name)  
+*optimizer       = string (optimizer type 'gd' for gradient descent or 'gdr' for gradient descent with shrinking step size)  
+*template        = numpy.ndarray or list of numpy.ndarray  
+*target          = numpy.ndarray or list of numpy.ndarray  
 
 ## References
 1. Beg, Mirza Faisal & Miller, Michael & Trouvé, Alain & Younes, Laurent. (2005). Computing Large Deformation Metric Mappings via Geodesic Flows of Diffeomorphisms. International Journal of Computer Vision. 61. 139-157. 10.1023/B:VISI.0000043755.93987.aa. 

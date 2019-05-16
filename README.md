@@ -1,7 +1,7 @@
 # torch_lddmm - GPU/CPU implementation of modern dense image LDDMM registration algorithms in PyTorch
 
 ## Overview
-This package performs optimization of LDDMM parameterized by a time-varying velocity field [1] on pairs of dense images (2D or 3D). This code is optimized to run on a GPU, but will also run on a CPU (original CPU version based on github.com/dtward/image_lddmm_tensorflow).
+This package performs optimization of LDDMM parameterized by a time-varying velocity field [1] on pairs of dense images (2D or 3D). This code is optimized to run on a GPU, but will also run on a CPU (original CPU version based on github.com/dtward/image_lddmm_tensorflow). This code does not use auto-differentiation but instead writes all gradients explicitly.
 
 See ./examples/ directory for example Jupyter notebooks.
 
@@ -35,7 +35,7 @@ lddmm = torch_lddmm.LDDMM(template=[image1_channel1,image1_channel2],target=[ima
 lddmm.run()
 ```
 
-### Example: Multichannel affine -> LDDMM+affine -> LDDMM
+### Example: Multichannel affine -> Multichannel LDDMM+affine -> Multichannel LDDMM
 ```python
 lddmm = torch_lddmm.LDDMM(template=[image1_channel1,image1_channel2],target=[image2_channel1,image2_channel2], a=8, epsilon=1.0, sigma=[10.0, 2.0], sigmaR=10.0, dx=[0.1,0.1,0.1], do_affine=1, do_lddmm=0, niter=50)
 lddmm.run()

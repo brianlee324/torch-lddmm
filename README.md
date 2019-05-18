@@ -24,10 +24,18 @@ In a Python session, "import torch_lddmm" and load image1 and image2 as numpy ar
 ```python
 lddmm = torch_lddmm.LDDMM(template=image1, target=image2, a=8, epsilon=1.0, sigma=10.0, sigmaR=10.0, dx=[0.1,0.1,0.1]) # create object
 lddmm.run() # run registration with these settings
-(vt0,vt1,vt2,A) = lddmm.outputTransforms() # output LDDMM and linear transforms
+(vt0,vt1,vt2) = lddmm.outputTransforms() # output LDDMM transforms
 (phi0,phi1,phi2) = lddmm.computeThisDisplacement() # output resultant displacement field
 deformed_template = lddmm.outputDeformedTemplate() # output deformed template as numpy array
 ```
+
+### Example: Basic Affine Alignment
+```python
+lddmm = torch_lddmm.LDDMM(template=image1, target=image2, do_lddmm=0, do_affine=1, epsilonL=1.0e-5, epsilonT=1.0e-5, sigma=10.0, dx=[0.1,0.1,0.1]) # create object
+lddmm.run()
+A = lddmm.outputTransforms()
+```
+
 
 ### Example: Multichannel LDDMM
 ```python
@@ -45,6 +53,7 @@ lddmm.run() # continue registration from current state
 lddmm.setParams('do_affine',0) # turn off affine, leave lddmm on
 lddmm.setParams('a',5) # shrink LDDMM kernel size
 lddmm.run() # continue registration from current state
+(vt0,vt1,vt2,A) = lddmm.outputTransforms() # output LDDMM and linear transforms
 ```
 
 ### Example: Multichannel LDDMM with contrast correction on channel 0 and weight estimation on channels 0 and 1

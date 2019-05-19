@@ -7,7 +7,6 @@ import os
 sys.path.insert(0,'/cis/home/leebc/Software/')
 import nibabel as nib
 
-<<<<<<< HEAD
 def mygaussian(sigma=1,size=5):
     ind = np.linspace(-np.floor(size/2.0),np.floor(size/2.0),size)
     X,Y = np.meshgrid(ind,ind,indexing='xy')
@@ -17,10 +16,6 @@ def mygaussian(sigma=1,size=5):
 
 class LDDMM:
     def __init__(self,template=None,target=None,costmask=None,outdir='./',gpu_number=0,a=5.0,p=2,niter=100,epsilon=5e-3,epsilonL=1.0e-7,epsilonT=2.0e-5,sigma=2.0,sigmaR=1.0,nt=5,do_lddmm=1,do_affine=0,checkaffinestep=0,optimizer='gd',maxclimbcount=3,savebestv=False,minenergychange = 0.000001,minbeta=1e-4,dtype='float',im_norm_ms=0,slice_alignment=0,energy_fraction=0.02,energy_fraction_from=0,cc=0,cc_channels=[],we=0,we_channels=[],sigmaW=1.0,nMstep=5,dx=None):
-=======
-class LDDMM:
-    def __init__(self,template=None,target=None,costmask=None,outdir='./',gpu_number=0,a=5.0,p=2,niter=100,epsilon=5e-3,epsilonL=1.0e-7,epsilonT=2.0e-5,sigma=2.0,sigmaR=1.0,nt=5,doaffine=0,checkaffinestep=1,optimizer='gd',maxclimbcount=3,savebestv=False,minenergychange = 0.000001,minbeta=1e-6,dtype='float',im_norm_ms=0,slice_alignment=0,energy_fraction=0.02,energy_fraction_from=0,cc=0,cc_channels=[],we=0,dx=None):
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
         self.params = {}
         self.params['gpu_number'] = gpu_number
         self.params['a'] = float(a)
@@ -35,20 +30,13 @@ class LDDMM:
             self.params['sigma'] = [float(x) for x in sigma]
         self.params['sigmaR'] = float(sigmaR)
         self.params['nt'] = nt
-<<<<<<< HEAD
         self.params['orig_nt'] = nt
-=======
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
         self.params['template'] = template
         self.params['target'] = target
         self.params['costmask'] = costmask
         self.params['outdir'] = outdir
-<<<<<<< HEAD
         self.params['do_lddmm'] = do_lddmm
         self.params['do_affine'] = do_affine
-=======
-        self.params['doaffine'] = doaffine
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
         self.params['checkaffinestep'] = checkaffinestep
         self.params['optimizer'] = optimizer
         self.params['maxclimbcount'] = maxclimbcount
@@ -62,12 +50,9 @@ class LDDMM:
         self.params['cc'] = cc
         self.params['cc_channels'] = cc_channels
         self.params['we'] = we
-<<<<<<< HEAD
         self.params['we_channels'] = we_channels
         self.params['sigmaW'] = sigmaW
         self.params['nMstep'] = nMstep
-=======
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
         self.params['dx'] = dx
         dtype_dict = {}
         dtype_dict['float'] = 'torch.FloatTensor'
@@ -88,29 +73,19 @@ class LDDMM:
         print('>    sigma           = ' + str(sigma) + ' (matching term coefficient (0.5/sigma**2))')
         print('>    sigmaR          = ' + str(sigmaR)+ ' (regularization term coefficient (0.5/sigmaR**2))')
         print('>    nt              = ' + str(nt) + ' (number of time steps in velocity field)')
-<<<<<<< HEAD
         print('>    do_lddmm        = ' + str(do_lddmm) + ' (perform LDDMM step, 0 = no, 1 = yes)')
         print('>    do_affine       = ' + str(do_affine) + ' (interleave linear registration: 0 = no, 1 = affine, 2 = rigid)')
         print('>    checkaffinestep = ' + str(checkaffinestep) + ' (evaluate linear matching energy: 0 = no, 1 = yes)')
-=======
-        print('>    doaffine        = ' + str(doaffine) + ' (interleave affine registration: 0 = no, 1 = yes)')
-        print('>    checkaffinestep = ' + str(checkaffinestep) + ' (evaluate affine matching energy: 0 = no, 1 = yes)')
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
         print('>    im_norm_ms      = ' + str(im_norm_ms) + ' (normalize image by mean and std: 0 = no, 1 = yes)')
         print('>    gpu_number      = ' + str(gpu_number) + ' (index of CUDA_VISIBLE_DEVICES to use)')
         print('>    dtype           = ' + str(dtype) + ' (bit depth, \'float\' or \'double\')')
         print('>    energy_fraction = ' + str(energy_fraction) + ' (fraction of initial energy at which to stop)')
         print('>    cc              = ' + str(cc) + ' (contrast correction: 0 = no, 1 = yes)')
         print('>    cc_channels     = ' + str(cc_channels) + ' (image channels to run contrast correction (0-indexed))')
-<<<<<<< HEAD
         print('>    we              = ' + str(we) + ' (weight estimation: 0 = no, 2+ = yes)')
         print('>    we_channels     = ' + str(we_channels) + ' (image channels to run weight estimation (0-indexed))')
         print('>    sigmaW          = ' + str(sigmaW) + ' (coefficient for each weight estimation class)')
         print('>    nMstep          = ' + str(nMstep) + ' (update weight estimation every nMstep steps)')
-=======
-        print('>    we              = ' + str(we) + ' (weight estimation: 0 = no, 1 = yes)')
-        print('>    costmask        = ' + str(costmask) + ' (costmask file name)')
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
         print('>    outdir          = ' + str(outdir) + ' (output directory name)')
         if optimizer in optimizer_dict:
             print('>    optimizer       = ' + str(optimizer_dict[optimizer]) + ' (optimizer type)')
@@ -146,7 +121,6 @@ class LDDMM:
             print(myprintstring)
         else:
             print('>    target          = ' + str(target) + '\n')
-<<<<<<< HEAD
         
         if isinstance(costmask,np.ndarray):
             print('>    costmask        = numpy.ndarray (costmask file name or numpy.ndarray)')
@@ -174,13 +148,10 @@ class LDDMM:
             self.initializer_flags['we'] = 1
         else:
             self.initializer_flags['we'] = 0
-=======
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
     
     # manual edit parameter
     def setParams(self,parameter_name,parameter_value):
         if parameter_name in self.params:
-<<<<<<< HEAD
             print('Parameter \'' + str(parameter_name) + '\' changed to \'' + str(parameter_value) + '\'.')
             if parameter_name == 'template' or parameter_name == 'target' or parameter_name == 'costmask':
                 self.initializer_flags['load'] = 1
@@ -200,11 +171,6 @@ class LDDMM:
             self.params[parameter_name] = parameter_value
         else:
             print('Parameter \'' + str(parameter_name) + '\' is not a valid parameter.')
-=======
-            self.params[parameter_name] = parameter_value
-        else:
-            print('Parameter \'' + str(parameter_name) + '\' is not a valid parameter.\n')
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
         
         return
     
@@ -257,19 +223,11 @@ class LDDMM:
             else:
                 self.params['cuda'] = 'cuda:' + str(self.params['gpu_number'])
         
-<<<<<<< HEAD
         number_list = ['a','p','niter','epsilon','sigmaR','nt','do_lddmm','do_affine','epsilonL','epsilonT','im_norm_ms','slice_alignment','energy_fraction','energy_fraction_from','cc','we','nMstep']
         string_list = ['outdir','optimizer']
         stringornone_list = ['costmask'] # or array, actually
         stringorlist_list = ['template','target'] # or array, actually
         numberorlist_list = ['sigma','cc_channels','we_channels','sigmaW']
-=======
-        number_list = ['a','p','niter','epsilon','sigmaR','nt','doaffine','epsilonL','epsilonT','im_norm_ms','slice_alignment','energy_fraction','energy_fraction_from','cc','we']
-        string_list = ['outdir','optimizer']
-        stringornone_list = ['costmask']
-        stringorlist_list = ['template','target'] # or array, actually
-        numberorlist_list = ['sigma','cc_channels']
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
         noneorarrayorlist_list = ['dx']
         for i in range(len(number_list)):
             if not isinstance(self.params[number_list[i]], (int, float)):
@@ -282,11 +240,7 @@ class LDDMM:
                 print('ERROR: ' + string_list[i] + ' must be a string.')
         
         for i in range(len(stringornone_list)):
-<<<<<<< HEAD
             if not isinstance(self.params[stringornone_list[i]], (str,np.ndarray)) and self.params[stringornone_list[i]] is not None:
-=======
-            if not isinstance(self.params[stringornone_list[i]], str) and self.params[stringornone_list[i]] is not None:
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
                 flag = -1
                 print('ERROR: ' + stringornone_list[i] + ' must be a string or None.')
         
@@ -345,7 +299,6 @@ class LDDMM:
                 print('ERROR: one or more of the contrast correction channels is greater than the number of image channels.')
                 flag = -1
         
-<<<<<<< HEAD
         # check weight estimation channels
         if isinstance(self.params['we_channels'],(int,float)):
             self.params['we_channels'] = [int(self.params['we_channels'])]
@@ -364,13 +317,10 @@ class LDDMM:
             print('ERROR: length of weight estimation sigma list must be either 1 or equal to parameter \'we\'.')
             flag = -1
         
-=======
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
         # optimizer flags
         if self.params['optimizer'] == 'gdw':
             self.params['savebestv'] = True
         
-<<<<<<< HEAD
         # set timesteps to 1 if doing affine only
         if self.params['do_affine'] > 0 and self.params['do_lddmm'] == 0 and not hasattr(self,'vt0'):
             if self.params['nt'] != 1:
@@ -386,8 +336,6 @@ class LDDMM:
                 self.params['nt'] = self.params['orig_nt']
                 print('WARNING: parameter \'nt\' was set to 1 and has been automatically reverted to your initial value of ' + str(self.params['orig_nt']) + '.')
         
-=======
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
         return flag
     
     # helper function to load images
@@ -485,17 +433,13 @@ class LDDMM:
                 return -1
         
         # load costmask if the variable exists
-<<<<<<< HEAD
         # TODO: make this multichannel
-=======
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
         if isinstance(costmask, str):
             K = [None]
             Kspacing = [None]
             Ksize = [None]
             # never normalize cost mask
             K[0],Kspacing[0],Ksize[0] = self.loadImage(costmask,im_norm_ms=0)
-<<<<<<< HEAD
         elif isinstance(costmask,np.ndarray):
             K = [None]
             Kspacing = [None]
@@ -506,8 +450,6 @@ class LDDMM:
                 Kspacing[0] = np.ones((3,)).astype(np.float32)
             else:
                 Kspacing[0] = self.params['dx']
-=======
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
         else:
             K = []
             Kspacing = []
@@ -533,11 +475,7 @@ class LDDMM:
             if costmask is not None:
                 self.M = K[0]
             else:
-<<<<<<< HEAD
                 self.M = torch.tensor(np.ones(I[0].shape)).type(self.params['dtype']).to(device=self.params['cuda']) # this could be initialized to a scalar 1.0 to save memory, if you do this make sure you check computeLinearContrastCorrection to see whether or not you are using torch.sum(w*self.M)
-=======
-                self.M = torch.tensor(np.ones(I[0].shape)).type(self.params['dtype']).to(device=self.params['cuda'])
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
             
             self.dx = list(Ispacing[0])
             self.dx = [float(x) for x in self.dx]
@@ -563,13 +501,8 @@ class LDDMM:
         
         # optimization multipliers (putting this in here because I want to reset this if I change the smoothing kernel)
         self.GDBeta = torch.tensor(1.0).type(self.params['dtype']).to(device=self.params['cuda'])
-<<<<<<< HEAD
         #self.GDBetaAffineR = float(1.0)
         #self.GDBetaAffineT = float(1.0)
-=======
-        self.GDBetaAffineR = float(1.0)
-        self.GDBetaAffineT = float(1.0)
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
         self.climbcount = 0
         if self.params['savebestv']:
             self.best = {}
@@ -616,21 +549,14 @@ class LDDMM:
         x1 = np.arange(self.nx[1])*self.dx[1]
         x2 = np.arange(self.nx[2])*self.dx[2]
         X0,X1,X2 = np.meshgrid(x0,x1,x2,indexing='ij')
-<<<<<<< HEAD
         self.X0 = torch.tensor(X0-np.mean(X0)).type(self.params['dtype']).to(device=self.params['cuda'])
         self.X1 = torch.tensor(X1-np.mean(X1)).type(self.params['dtype']).to(device=self.params['cuda'])
         self.X2 = torch.tensor(X2-np.mean(X2)).type(self.params['dtype']).to(device=self.params['cuda'])
-=======
-        self.X0 = torch.tensor(X0).type(self.params['dtype']).to(device=self.params['cuda'])
-        self.X1 = torch.tensor(X1).type(self.params['dtype']).to(device=self.params['cuda'])
-        self.X2 = torch.tensor(X2).type(self.params['dtype']).to(device=self.params['cuda'])
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
         # 2D sampling domain for slice alignment
         #if self.params['slice_alignment'] == 1:
         
         # v and I
         if self.params['gpu_number'] is not None:
-<<<<<<< HEAD
             if not hasattr(self, 'vt0') and self.initializer_flags['lddmm'] == 1: # we never reset lddmm variables
                 self.vt0 = []
                 self.vt1 = []
@@ -662,41 +588,10 @@ class LDDMM:
                     self.vt0.append(torch.tensor(np.zeros((self.nx[0],self.nx[1],self.nx[2]))).type(self.params['dtype']))
                     self.vt1.append(torch.tensor(np.zeros((self.nx[0],self.nx[1],self.nx[2]))).type(self.params['dtype']))
                     self.vt2.append(torch.tensor(np.zeros((self.nx[0],self.nx[1],self.nx[2]))).type(self.params['dtype']))
-=======
-            self.vt0 = []
-            self.vt1 = []
-            self.vt2 = []
-            for i in range(self.params['nt']):
-                self.vt0.append(torch.tensor(np.zeros((self.nx[0],self.nx[1],self.nx[2]))).type(self.params['dtype']).cuda())
-                self.vt1.append(torch.tensor(np.zeros((self.nx[0],self.nx[1],self.nx[2]))).type(self.params['dtype']).cuda())
-                self.vt2.append(torch.tensor(np.zeros((self.nx[0],self.nx[1],self.nx[2]))).type(self.params['dtype']).cuda())
-            
-            self.It = [ [None]*(self.params['nt']+1) for i in range(len(self.I)) ]
-            for ii in range(len(self.I)):
-                # NOTE: you cannot use pointers / list multiplication for cuda tensors if you want actual copies
-                #self.It.append(torch.tensor(self.I[:,:,:]).type(self.params['dtype']).cuda())
-                for i in range(self.params['nt']+1):
-                    if i == 0:
-                        self.It[ii][i] = self.I[ii]
-                    else:
-                        self.It[ii][i] = torch.tensor(self.I[ii][:,:,:]).type(self.params['dtype']).cuda()
-        else:
-            #self.vt0 = [torch.tensor(np.zeros((self.nx[0],self.nx[1],self.nx[2]))).type(self.params['dtype'])]*self.params['nt']
-            #self.vt1 = [torch.tensor(np.zeros((self.nx[0],self.nx[1],self.nx[2]))).type(self.params['dtype'])]*self.params['nt']
-            #self.vt2 = [torch.tensor(np.zeros((self.nx[0],self.nx[1],self.nx[2]))).type(self.params['dtype'])]*self.params['nt']
-            self.vt0 = []
-            self.vt1 = []
-            self.vt2 = []
-            for i in range(self.params['nt']):
-                self.vt0.append(torch.tensor(np.zeros((self.nx[0],self.nx[1],self.nx[2]))).type(self.params['dtype']))
-                self.vt1.append(torch.tensor(np.zeros((self.nx[0],self.nx[1],self.nx[2]))).type(self.params['dtype']))
-                self.vt2.append(torch.tensor(np.zeros((self.nx[0],self.nx[1],self.nx[2]))).type(self.params['dtype']))
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
             
             #self.It = [[None]]*len(self.I)
             #for i in range(len(self.I)):
             #    self.It[i] = [torch.tensor(self.I[i][:,:,:]).type(self.params['dtype'])]*(self.params['nt']+1)
-<<<<<<< HEAD
             if self.initializer_flags['load'] == 1 or self.initializer_flags['lddmm'] == 1:
                 self.It = [ [None]*(self.params['nt']+1) for i in range(len(self.I)) ]
                 for ii in range(len(self.I)):
@@ -750,31 +645,6 @@ class LDDMM:
         self.initializer_flags['we'] = 0
     
     
-=======
-            self.It = [ [None]*(self.params['nt']+1) for i in range(len(self.I)) ]
-            for ii in range(len(self.I)):
-                # NOTE: you cannot use pointers / list multiplication for cuda tensors if you want actual copies
-                #self.It.append(torch.tensor(self.I[:,:,:]).type(self.params['dtype']).cuda())
-                for i in range(self.params['nt']+1):
-                    self.It[ii][i] = torch.tensor(self.I[ii][:,:,:]).type(self.params['dtype'])
-        
-        # affine parameters
-        self.affineA = torch.tensor(np.eye(4)).type(self.params['dtype']).to(device=self.params['cuda'])
-        self.lastaffineA = torch.tensor(np.eye(4)).type(self.params['dtype']).to(device=self.params['cuda'])
-        self.gradA = torch.tensor(np.zeros((4,4))).type(self.params['dtype']).to(device=self.params['cuda'])
-        
-        # contrast correction variables
-        self.ccIbar = []
-        self.ccJbar = []
-        self.ccVarI = []
-        self.ccCovIJ = []
-        for i in range(len(self.I)):
-            self.ccIbar.append(0.0)
-            self.ccJbar.append(0.0)
-            self.ccVarI.append(1.0)
-            self.ccCovIJ.append(1.0)
-        
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
     # initialize lddmm variables
     def initializeVariables2d(self):
         # TODO: handle 2D and 3D versions
@@ -793,13 +663,8 @@ class LDDMM:
         x0 = np.arange(self.nx[0])*self.dx[0]
         x1 = np.arange(self.nx[1])*self.dx[1]
         X0,X1 = np.meshgrid(x0,x1,indexing='ij')
-<<<<<<< HEAD
         self.X0 = torch.tensor(X0-np.mean(X0)).type(self.params['dtype']).to(device=self.params['cuda'])
         self.X1 = torch.tensor(X1-np.mean(X1)).type(self.params['dtype']).to(device=self.params['cuda'])
-=======
-        self.X0 = torch.tensor(X0).type(self.params['dtype']).to(device=self.params['cuda'])
-        self.X1 = torch.tensor(X1).type(self.params['dtype']).to(device=self.params['cuda'])
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
         # v and I
         if self.params['gpu_number'] is not None:
             self.vt0 = []
@@ -889,7 +754,6 @@ class LDDMM:
         # TODO: evaluate memory vs speed for precomputing Xs, Ys, Zs
         for t in range(self.params['nt']):
             # update phiinv using method of characteristics
-<<<<<<< HEAD
             if self.params['do_lddmm'] == 1 or hasattr(self, 'vt0'):
                 phiinv0_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv0_gpu-self.X0).unsqueeze(0).unsqueeze(0),torch.stack(((self.X2-self.vt2[t]*self.dt)/(self.nx[2]*self.dx[2]-self.dx[2])*2,(self.X1-self.vt1[t]*self.dt)/(self.nx[1]*self.dx[1]-self.dx[1])*2,(self.X0-self.vt0[t]*self.dt)/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='border')) + (self.X0-self.vt0[t]*self.dt)
                 phiinv1_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv1_gpu-self.X1).unsqueeze(0).unsqueeze(0),torch.stack(((self.X2-self.vt2[t]*self.dt)/(self.nx[2]*self.dx[2]-self.dx[2])*2,(self.X1-self.vt1[t]*self.dt)/(self.nx[1]*self.dx[1]-self.dx[1])*2,(self.X0-self.vt0[t]*self.dt)/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='border')) + (self.X1-self.vt1[t]*self.dt)
@@ -904,20 +768,6 @@ class LDDMM:
                     I = [None]*len(self.I)
                     for i in range(len(self.I)):
                         I[i] = torch.squeeze(torch.nn.functional.grid_sample(self.It[i][0].unsqueeze(0).unsqueeze(0),torch.stack((phiinv2_temp/(self.nx[2]*self.dx[2]-self.dx[2])*2,phiinv1_temp/(self.nx[1]*self.dx[1]-self.dx[1])*2,phiinv0_temp/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='zeros'))
-=======
-            phiinv0_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv0_gpu-self.X0).unsqueeze(0).unsqueeze(0),torch.stack(((self.X2-self.vt2[t]*self.dt)/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,(self.X1-self.vt1[t]*self.dt)/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,(self.X0-self.vt0[t]*self.dt)/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0),padding_mode='border')) + (self.X0-self.vt0[t]*self.dt)
-            phiinv1_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv1_gpu-self.X1).unsqueeze(0).unsqueeze(0),torch.stack(((self.X2-self.vt2[t]*self.dt)/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,(self.X1-self.vt1[t]*self.dt)/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,(self.X0-self.vt0[t]*self.dt)/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0),padding_mode='border')) + (self.X1-self.vt1[t]*self.dt)
-            phiinv2_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv2_gpu-self.X2).unsqueeze(0).unsqueeze(0),torch.stack(((self.X2-self.vt2[t]*self.dt)/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,(self.X1-self.vt1[t]*self.dt)/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,(self.X0-self.vt0[t]*self.dt)/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0),padding_mode='border')) + (self.X2-self.vt2[t]*self.dt)
-            
-            # do affine transforms
-            if t == self.params['nt']-1 and self.params['doaffine'] == 1:
-                if self.params['checkaffinestep'] == 1:
-                    # new diffeo with old affine
-                    phiinv0_temp,phiinv1_temp,phiinv2_temp = self.forwardDeformationAffineVectorized(self.lastaffineA,phiinv0_gpu,phiinv1_gpu,phiinv2_gpu)
-                    I = [None]*len(self.I)
-                    for i in range(len(self.I)):
-                        I[i] = torch.squeeze(torch.nn.functional.grid_sample(self.It[i][0].unsqueeze(0).unsqueeze(0),torch.stack((phiinv2_temp/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,phiinv1_temp/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,phiinv0_temp/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0),padding_mode='border'))
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
                     
                     self.EMDiffeo.append( self.calculateMatchingEnergyMSEOnly(I) )
                     # new diffeo with new L and old T
@@ -925,11 +775,7 @@ class LDDMM:
                     phiinv0_temp,phiinv1_temp,phiinv2_temp = self.forwardDeformationAffineT(self.lastaffineA.clone(),phiinv0_gpu,phiinv1_gpu,phiinv2_gpu)
                     I = [None]*len(self.I)
                     for i in range(len(self.I)):
-<<<<<<< HEAD
                         I[i] = torch.squeeze(torch.nn.functional.grid_sample(self.It[i][0].unsqueeze(0).unsqueeze(0),torch.stack((phiinv2_temp/(self.nx[2]*self.dx[2]-self.dx[2])*2,phiinv1_temp/(self.nx[1]*self.dx[1]-self.dx[1])*2,phiinv0_temp/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='zeros'))
-=======
-                        I[i] = torch.squeeze(torch.nn.functional.grid_sample(self.It[i][0].unsqueeze(0).unsqueeze(0),torch.stack((phiinv2_temp/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,phiinv1_temp/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,phiinv0_temp/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0),padding_mode='border'))
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
                     
                     self.EMAffineR.append( self.calculateMatchingEnergyMSEOnly(I) )
                     # new everything
@@ -939,7 +785,6 @@ class LDDMM:
             
             # deform the image
             for i in range(len(self.I)):
-<<<<<<< HEAD
                 self.It[i][t+1] = torch.squeeze(torch.nn.functional.grid_sample(self.It[i][0].unsqueeze(0).unsqueeze(0),torch.stack((phiinv2_gpu/(self.nx[2]*self.dx[2]-self.dx[2])*2,phiinv1_gpu/(self.nx[1]*self.dx[1]-self.dx[1])*2,phiinv0_gpu/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='zeros'))
         
         return self.It,phiinv0_gpu, phiinv1_gpu, phiinv2_gpu
@@ -967,14 +812,6 @@ class LDDMM:
 
     # apply current transform to new image
     def applyThisTransform(self, I, interpmode='bilinear',dtype='torch.FloatTensor'):
-=======
-                self.It[i][t+1] = torch.squeeze(torch.nn.functional.grid_sample(self.It[i][0].unsqueeze(0).unsqueeze(0),torch.stack((phiinv2_gpu/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,phiinv1_gpu/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,phiinv0_gpu/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0),padding_mode='border'))
-        
-        return self.It,phiinv0_gpu, phiinv1_gpu, phiinv2_gpu
-    
-    # apply current transform to new image
-    def applyThisTransform(self, I, interpmode='bilinear',dtype='torch.DoubleTensor'):
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
         It = []
         for i in range(self.params['nt']+1):
             It.append(torch.tensor(I).type(dtype).to(device=self.params['cuda']))
@@ -985,7 +822,6 @@ class LDDMM:
         # TODO: evaluate memory vs speed for precomputing Xs, Ys, Zs
         for t in range(self.params['nt']):
             # update phiinv using method of characteristics
-<<<<<<< HEAD
             if self.params['do_lddmm'] == 1 or hasattr(self,'vt0'):
                 phiinv0_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv0_gpu-self.X0).unsqueeze(0).unsqueeze(0),torch.stack(((self.X2-self.vt2[t]*self.dt)/(self.nx[2]*self.dx[2]-self.dx[2])*2,(self.X1-self.vt1[t]*self.dt)/(self.nx[1]*self.dx[1]-self.dx[1])*2,(self.X0-self.vt0[t]*self.dt)/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='border')) + (self.X0-self.vt0[t]*self.dt)
                 phiinv1_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv1_gpu-self.X1).unsqueeze(0).unsqueeze(0),torch.stack(((self.X2-self.vt2[t]*self.dt)/(self.nx[2]*self.dx[2]-self.dx[2])*2,(self.X1-self.vt1[t]*self.dt)/(self.nx[1]*self.dx[1]-self.dx[1])*2,(self.X0-self.vt0[t]*self.dt)/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='border')) + (self.X1-self.vt1[t]*self.dt)
@@ -996,17 +832,6 @@ class LDDMM:
             
             # deform the image
             It[t+1] = torch.squeeze(torch.nn.functional.grid_sample(It[0].unsqueeze(0).unsqueeze(0),torch.stack((phiinv2_gpu.type(dtype).to(device=self.params['cuda'])/(self.nx[2]*self.dx[2]-self.dx[2])*2,phiinv1_gpu.type(dtype).to(device=self.params['cuda'])/(self.nx[1]*self.dx[1]-self.dx[1])*2,phiinv0_gpu.type(dtype).to(device=self.params['cuda'])/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='zeros',mode=interpmode))
-=======
-            phiinv0_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv0_gpu-self.X0).unsqueeze(0).unsqueeze(0),torch.stack(((self.X2-self.vt2[t]*self.dt)/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,(self.X1-self.vt1[t]*self.dt)/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,(self.X0-self.vt0[t]*self.dt)/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0),padding_mode='border')) + (self.X0-self.vt0[t]*self.dt)
-            phiinv1_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv1_gpu-self.X1).unsqueeze(0).unsqueeze(0),torch.stack(((self.X2-self.vt2[t]*self.dt)/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,(self.X1-self.vt1[t]*self.dt)/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,(self.X0-self.vt0[t]*self.dt)/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0),padding_mode='border')) + (self.X1-self.vt1[t]*self.dt)
-            phiinv2_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv2_gpu-self.X2).unsqueeze(0).unsqueeze(0),torch.stack(((self.X2-self.vt2[t]*self.dt)/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,(self.X1-self.vt1[t]*self.dt)/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,(self.X0-self.vt0[t]*self.dt)/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0),padding_mode='border')) + (self.X2-self.vt2[t]*self.dt)
-            
-            if t == self.params['nt']-1 and self.params['doaffine'] == 1:
-                phiinv0_gpu,phiinv1_gpu,phiinv2_gpu = self.forwardDeformationAffineVectorized(self.affineA,phiinv0_gpu,phiinv1_gpu,phiinv2_gpu)
-            
-            # deform the image
-            It[t+1] = torch.squeeze(torch.nn.functional.grid_sample(It[0].unsqueeze(0).unsqueeze(0),torch.stack((phiinv2_gpu.type(dtype).to(device=self.params['cuda'])/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,phiinv1_gpu.type(dtype).to(device=self.params['cuda'])/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,phiinv0_gpu.type(dtype).to(device=self.params['cuda'])/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0),padding_mode='border',mode=interpmode))
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
         
         return It,phiinv0_gpu, phiinv1_gpu, phiinv2_gpu
     
@@ -1017,7 +842,6 @@ class LDDMM:
         # TODO: evaluate memory vs speed for precomputing Xs, Ys, Zs
         for t in range(self.params['nt']):
             # update phiinv using method of characteristics
-<<<<<<< HEAD
             phiinv0_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv0_gpu-self.X0).unsqueeze(0).unsqueeze(0),torch.stack(((self.X1-self.vt1[t]*self.dt)/(self.nx[1]*self.dx[1]-self.dx[1])*2,(self.X0-self.vt0[t]*self.dt)/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=2).unsqueeze(0),padding_mode='border')) + (self.X0-self.vt0[t]*self.dt)
             phiinv1_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv1_gpu-self.X1).unsqueeze(0).unsqueeze(0),torch.stack(((self.X1-self.vt1[t]*self.dt)/(self.nx[1]*self.dx[1]-self.dx[1])*2,(self.X0-self.vt0[t]*self.dt)/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=2).unsqueeze(0),padding_mode='border')) + (self.X1-self.vt1[t]*self.dt)            
             '''
@@ -1026,25 +850,11 @@ class LDDMM:
                     # new diffeo with old affine
                     phiinv0_temp,phiinv1_temp,phiinv2_temp = self.forwardDeformationAffineVectorized(self.lastaffineA,phiinv0_gpu,phiinv1_gpu,phiinv2_gpu)
                     I = torch.squeeze(torch.nn.functional.grid_sample(self.It[0].unsqueeze(0).unsqueeze(0),torch.stack((phiinv2_temp/(self.nx[2]*self.dx[2]-self.dx[2])*2,phiinv1_temp/(self.nx[1]*self.dx[1]-self.dx[1])*2,phiinv0_temp/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='border'))
-=======
-            phiinv0_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv0_gpu-self.X0).unsqueeze(0).unsqueeze(0),torch.stack(((self.X1-self.vt1[t]*self.dt)/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,(self.X0-self.vt0[t]*self.dt)/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=2).unsqueeze(0),padding_mode='border')) + (self.X0-self.vt0[t]*self.dt)
-            phiinv1_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv1_gpu-self.X1).unsqueeze(0).unsqueeze(0),torch.stack(((self.X1-self.vt1[t]*self.dt)/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,(self.X0-self.vt0[t]*self.dt)/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=2).unsqueeze(0),padding_mode='border')) + (self.X1-self.vt1[t]*self.dt)            
-            '''
-            if t == self.params['nt']-1 and self.params['doaffine'] == 1:
-                if self.params['checkaffinestep'] == 1:
-                    # new diffeo with old affine
-                    phiinv0_temp,phiinv1_temp,phiinv2_temp = self.forwardDeformationAffineVectorized(self.lastaffineA,phiinv0_gpu,phiinv1_gpu,phiinv2_gpu)
-                    I = torch.squeeze(torch.nn.functional.grid_sample(self.It[0].unsqueeze(0).unsqueeze(0),torch.stack((phiinv2_temp/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,phiinv1_temp/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,phiinv0_temp/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0),padding_mode='border'))
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
                     self.EMDiffeo.append( self.calculateMatchingEnergyMSEOnly(I) )
                     # new diffeo with new L and old T
                     phiinv0_gpu,phiinv1_gpu,phiinv2_gpu = self.forwardDeformationAffineR(self.affineA,phiinv0_gpu,phiinv1_gpu,phiinv2_gpu)
                     phiinv0_temp,phiinv1_temp,phiinv2_temp = self.forwardDeformationAffineT(self.lastaffineA,phiinv0_gpu,phiinv1_gpu,phiinv2_gpu)
-<<<<<<< HEAD
                     I = torch.squeeze(torch.nn.functional.grid_sample(self.It[0].unsqueeze(0).unsqueeze(0),torch.stack((phiinv2_temp/(self.nx[2]*self.dx[2]-self.dx[2])*2,phiinv1_temp/(self.nx[1]*self.dx[1]-self.dx[1])*2,phiinv0_temp/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='border'))
-=======
-                    I = torch.squeeze(torch.nn.functional.grid_sample(self.It[0].unsqueeze(0).unsqueeze(0),torch.stack((phiinv2_temp/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,phiinv1_temp/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,phiinv0_temp/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0),padding_mode='border'))
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
                     self.EMAffineR.append( self.calculateMatchingEnergyMSEOnly(I) )
                     # new everything
                     phiinv0_gpu,phiinv1_gpu,phiinv2_gpu = self.forwardDeformationAffineT(self.affineA,phiinv0_gpu,phiinv1_gpu,phiinv2_gpu)
@@ -1053,41 +863,25 @@ class LDDMM:
             '''
             # deform the image
             for i in range(len(self.I)):
-<<<<<<< HEAD
                 self.It[i][t+1] = torch.squeeze(torch.nn.functional.grid_sample(self.It[i][0].unsqueeze(0).unsqueeze(0),torch.stack((phiinv1_gpu/(self.nx[1]*self.dx[1]-self.dx[1])*2,phiinv0_gpu/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=2).unsqueeze(0),padding_mode='zeros'))
-=======
-                self.It[i][t+1] = torch.squeeze(torch.nn.functional.grid_sample(self.It[i][0].unsqueeze(0).unsqueeze(0),torch.stack((phiinv1_gpu/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,phiinv0_gpu/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=2).unsqueeze(0),padding_mode='border'))
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
         
         return self.It,phiinv0_gpu, phiinv1_gpu
     
     # deform template forward using affine transform
-<<<<<<< HEAD
     # this could be vectorized by stacking X0, X1, X2
-=======
-    # TODO: can this be combined with forwardDeformation() for speed? then would I remove det(A) from the gradient?
-    # TODO: this could be vectorized by stacking X0, X1, X2
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
     def forwardDeformationAffine(self,affineA,phiinv0_gpu,phiinv1_gpu,phiinv2_gpu):
         affineB = torch.inverse(affineA)
         
         #Xs = affineB[0,0]*self.X0 + affineB[0,1]*self.X1 + affineB[0,2]*self.X2 + affineB[0,3]
         #Ys = affineB[1,0]*self.X0 + affineB[1,1]*self.X1 + affineB[1,2]*self.X2 + affineB[1,3]
         #Zs = affineB[2,0]*self.X0 + affineB[2,1]*self.X1 + affineB[2,2]*self.X2 + affineB[2,3]
-<<<<<<< HEAD
         phiinv0_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv0_gpu-self.X0).unsqueeze(0).unsqueeze(0),torch.stack(((affineB[2,0]*self.X0 + affineB[2,1]*self.X1 + affineB[2,2]*self.X2 + affineB[2,3])/(self.nx[2]*self.dx[2]-self.dx[2])*2,(affineB[1,0]*self.X0 + affineB[1,1]*self.X1 + affineB[1,2]*self.X2 + affineB[1,3])/(self.nx[1]*self.dx[1]-self.dx[1])*2,(affineB[0,0]*self.X0 + affineB[0,1]*self.X1 + affineB[0,2]*self.X2 + affineB[0,3])/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='border')) + (affineB[0,0]*self.X0 + affineB[0,1]*self.X1 + affineB[0,2]*self.X2 + affineB[0,3])
         phiinv1_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv1_gpu-self.X1).unsqueeze(0).unsqueeze(0),torch.stack(((affineB[2,0]*self.X0 + affineB[2,1]*self.X1 + affineB[2,2]*self.X2 + affineB[2,3])/(self.nx[2]*self.dx[2]-self.dx[2])*2,(affineB[1,0]*self.X0 + affineB[1,1]*self.X1 + affineB[1,2]*self.X2 + affineB[1,3])/(self.nx[1]*self.dx[1]-self.dx[1])*2,(affineB[0,0]*self.X0 + affineB[0,1]*self.X1 + affineB[0,2]*self.X2 + affineB[0,3])/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='border')) + (affineB[1,0]*self.X0 + affineB[1,1]*self.X1 + affineB[1,2]*self.X2 + affineB[1,3])
         phiinv2_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv2_gpu-self.X2).unsqueeze(0).unsqueeze(0),torch.stack(((affineB[2,0]*self.X0 + affineB[2,1]*self.X1 + affineB[2,2]*self.X2 + affineB[2,3])/(self.nx[2]*self.dx[2]-self.dx[2])*2,(affineB[1,0]*self.X0 + affineB[1,1]*self.X1 + affineB[1,2]*self.X2 + affineB[1,3])/(self.nx[1]*self.dx[1]-self.dx[1])*2,(affineB[0,0]*self.X0 + affineB[0,1]*self.X1 + affineB[0,2]*self.X2 + affineB[0,3])/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='border')) + (affineB[2,0]*self.X0 + affineB[2,1]*self.X1 + affineB[2,2]*self.X2 + affineB[2,3])
-=======
-        phiinv0_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv0_gpu-self.X0).unsqueeze(0).unsqueeze(0),torch.stack(((affineB[2,0]*self.X0 + affineB[2,1]*self.X1 + affineB[2,2]*self.X2 + affineB[2,3])/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,(affineB[1,0]*self.X0 + affineB[1,1]*self.X1 + affineB[1,2]*self.X2 + affineB[1,3])/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,(affineB[0,0]*self.X0 + affineB[0,1]*self.X1 + affineB[0,2]*self.X2 + affineB[0,3])/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0),padding_mode='border')) + (affineB[0,0]*self.X0 + affineB[0,1]*self.X1 + affineB[0,2]*self.X2 + affineB[0,3])
-        phiinv1_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv1_gpu-self.X1).unsqueeze(0).unsqueeze(0),torch.stack(((affineB[2,0]*self.X0 + affineB[2,1]*self.X1 + affineB[2,2]*self.X2 + affineB[2,3])/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,(affineB[1,0]*self.X0 + affineB[1,1]*self.X1 + affineB[1,2]*self.X2 + affineB[1,3])/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,(affineB[0,0]*self.X0 + affineB[0,1]*self.X1 + affineB[0,2]*self.X2 + affineB[0,3])/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0),padding_mode='border')) + (affineB[1,0]*self.X0 + affineB[1,1]*self.X1 + affineB[1,2]*self.X2 + affineB[1,3])
-        phiinv2_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv2_gpu-self.X2).unsqueeze(0).unsqueeze(0),torch.stack(((affineB[2,0]*self.X0 + affineB[2,1]*self.X1 + affineB[2,2]*self.X2 + affineB[2,3])/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,(affineB[1,0]*self.X0 + affineB[1,1]*self.X1 + affineB[1,2]*self.X2 + affineB[1,3])/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,(affineB[0,0]*self.X0 + affineB[0,1]*self.X1 + affineB[0,2]*self.X2 + affineB[0,3])/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0),padding_mode='border')) + (affineB[2,0]*self.X0 + affineB[2,1]*self.X1 + affineB[2,2]*self.X2 + affineB[2,3])
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
         '''
         #Xs = affineB[0,0]*self.X1 + affineB[0,1]*self.X0 + affineB[0,2]*self.X2 + affineB[0,3]
         #Ys = affineB[1,0]*self.X1 + affineB[1,1]*self.X0 + affineB[1,2]*self.X2 + affineB[1,3]
         #Zs = affineB[2,0]*self.X1 + affineB[2,1]*self.X0 + affineB[2,2]*self.X2 + affineB[2,3]
-<<<<<<< HEAD
         phiinv0_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv0_gpu-self.X0).unsqueeze(0).unsqueeze(0),torch.stack(((affineB[2,0]*self.X1 + affineB[2,1]*self.X0 + affineB[2,2]*self.X2 + affineB[2,3])/(self.nx[2]*self.dx[2]-self.dx[2])*2,(affineB[1,0]*self.X1 + affineB[1,1]*self.X0 + affineB[1,2]*self.X2 + affineB[1,3])/(self.nx[1]*self.dx[1]-self.dx[1])*2,(affineB[0,0]*self.X1 + affineB[0,1]*self.X0 + affineB[0,2]*self.X2 + affineB[0,3])/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0))) + (affineB[0,0]*self.X1 + affineB[0,1]*self.X0 + affineB[0,2]*self.X2 + affineB[0,3])
         phiinv1_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv1_gpu-self.X1).unsqueeze(0).unsqueeze(0),torch.stack(((affineB[2,0]*self.X1 + affineB[2,1]*self.X0 + affineB[2,2]*self.X2 + affineB[2,3])/(self.nx[2]*self.dx[2]-self.dx[2])*2,(affineB[1,0]*self.X1 + affineB[1,1]*self.X0 + affineB[1,2]*self.X2 + affineB[1,3])/(self.nx[1]*self.dx[1]-self.dx[1])*2,(affineB[0,0]*self.X1 + affineB[0,1]*self.X0 + affineB[0,2]*self.X2 + affineB[0,3])/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0))) + (affineB[1,0]*self.X1 + affineB[1,1]*self.X0 + affineB[1,2]*self.X2 + affineB[1,3])
         phiinv2_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv2_gpu-self.X2).unsqueeze(0).unsqueeze(0),torch.stack(((affineB[2,0]*self.X1 + affineB[2,1]*self.X0 + affineB[2,2]*self.X2 + affineB[2,3])/(self.nx[2]*self.dx[2]-self.dx[2])*2,(affineB[1,0]*self.X1 + affineB[1,1]*self.X0 + affineB[1,2]*self.X2 + affineB[1,3])/(self.nx[1]*self.dx[1]-self.dx[1])*2,(affineB[0,0]*self.X1 + affineB[0,1]*self.X0 + affineB[0,2]*self.X2 + affineB[0,3])/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0))) + (affineB[2,0]*self.X1 + affineB[2,1]*self.X0 + affineB[2,2]*self.X2 + affineB[2,3])
@@ -1095,15 +889,6 @@ class LDDMM:
         # deform the last time point in the image list
         # actually, just compute phiinv0_gpu, phiinv1_gpu, etc, before the final time step's image deformation
         #self.It[-1] = torch.squeeze(torch.nn.functional.grid_sample(self.It[0].unsqueeze(0).unsqueeze(0),torch.stack((phiinv2_gpu/(self.nx[2]*self.dx[2]-self.dx[2])*2,phiinv1_gpu/(self.nx[1]*self.dx[1]-self.dx[1])*2,phiinv0_gpu/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0)))
-=======
-        phiinv0_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv0_gpu-self.X0).unsqueeze(0).unsqueeze(0),torch.stack(((affineB[2,0]*self.X1 + affineB[2,1]*self.X0 + affineB[2,2]*self.X2 + affineB[2,3])/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,(affineB[1,0]*self.X1 + affineB[1,1]*self.X0 + affineB[1,2]*self.X2 + affineB[1,3])/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,(affineB[0,0]*self.X1 + affineB[0,1]*self.X0 + affineB[0,2]*self.X2 + affineB[0,3])/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0))) + (affineB[0,0]*self.X1 + affineB[0,1]*self.X0 + affineB[0,2]*self.X2 + affineB[0,3])
-        phiinv1_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv1_gpu-self.X1).unsqueeze(0).unsqueeze(0),torch.stack(((affineB[2,0]*self.X1 + affineB[2,1]*self.X0 + affineB[2,2]*self.X2 + affineB[2,3])/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,(affineB[1,0]*self.X1 + affineB[1,1]*self.X0 + affineB[1,2]*self.X2 + affineB[1,3])/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,(affineB[0,0]*self.X1 + affineB[0,1]*self.X0 + affineB[0,2]*self.X2 + affineB[0,3])/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0))) + (affineB[1,0]*self.X1 + affineB[1,1]*self.X0 + affineB[1,2]*self.X2 + affineB[1,3])
-        phiinv2_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv2_gpu-self.X2).unsqueeze(0).unsqueeze(0),torch.stack(((affineB[2,0]*self.X1 + affineB[2,1]*self.X0 + affineB[2,2]*self.X2 + affineB[2,3])/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,(affineB[1,0]*self.X1 + affineB[1,1]*self.X0 + affineB[1,2]*self.X2 + affineB[1,3])/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,(affineB[0,0]*self.X1 + affineB[0,1]*self.X0 + affineB[0,2]*self.X2 + affineB[0,3])/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0))) + (affineB[2,0]*self.X1 + affineB[2,1]*self.X0 + affineB[2,2]*self.X2 + affineB[2,3])
-        '''
-        # deform the last time point in the image list
-        # actually, just compute phiinv0_gpu, phiinv1_gpu, etc, before the final time step's image deformation
-        #self.It[-1] = torch.squeeze(torch.nn.functional.grid_sample(self.It[0].unsqueeze(0).unsqueeze(0),torch.stack((phiinv2_gpu/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,phiinv1_gpu/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,phiinv0_gpu/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0)))
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
         return phiinv0_gpu, phiinv1_gpu, phiinv2_gpu
     
     # deform template forward using affine transform vectorized
@@ -1115,15 +900,9 @@ class LDDMM:
         #Ys = affineB[1,0]*self.X0 + affineB[1,1]*self.X1 + affineB[1,2]*self.X2 + affineB[1,3]
         #Zs = affineB[2,0]*self.X0 + affineB[2,1]*self.X1 + affineB[2,2]*self.X2 + affineB[2,3]
         s = torch.mm(affineB[0:3,0:3],torch.stack( (torch.reshape(self.X0,(-1,)),torch.reshape(self.X1,(-1,)),torch.reshape(self.X2,(-1,))), dim=0)) + torch.reshape(affineB[0:3,3],(3,1)).expand(-1,self.X0.numel())
-<<<<<<< HEAD
         phiinv0_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv0_gpu-self.X0).unsqueeze(0).unsqueeze(0),torch.stack(((torch.reshape(s[2,:],(self.X2.shape)))/(self.nx[2]*self.dx[2]-self.dx[2])*2,(torch.reshape(s[1,:],(self.X1.shape)))/(self.nx[1]*self.dx[1]-self.dx[1])*2,(torch.reshape(s[0,:],(self.X0.shape)))/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='border',mode=interpmode)) + (torch.reshape(s[0,:],(self.X0.shape)))
         phiinv1_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv1_gpu-self.X1).unsqueeze(0).unsqueeze(0),torch.stack(((torch.reshape(s[2,:],(self.X2.shape)))/(self.nx[2]*self.dx[2]-self.dx[2])*2,(torch.reshape(s[1,:],(self.X1.shape)))/(self.nx[1]*self.dx[1]-self.dx[1])*2,(torch.reshape(s[0,:],(self.X0.shape)))/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='border',mode=interpmode)) + (torch.reshape(s[1,:],(self.X1.shape)))
         phiinv2_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv2_gpu-self.X2).unsqueeze(0).unsqueeze(0),torch.stack(((torch.reshape(s[2,:],(self.X2.shape)))/(self.nx[2]*self.dx[2]-self.dx[2])*2,(torch.reshape(s[1,:],(self.X1.shape)))/(self.nx[1]*self.dx[1]-self.dx[1])*2,(torch.reshape(s[0,:],(self.X0.shape)))/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='border',mode=interpmode)) + (torch.reshape(s[2,:],(self.X2.shape)))
-=======
-        phiinv0_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv0_gpu-self.X0).unsqueeze(0).unsqueeze(0),torch.stack(((torch.reshape(s[2,:],(self.X2.shape)))/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,(torch.reshape(s[1,:],(self.X1.shape)))/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,(torch.reshape(s[0,:],(self.X0.shape)))/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0),padding_mode='border',mode=interpmode)) + (torch.reshape(s[0,:],(self.X0.shape)))
-        phiinv1_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv1_gpu-self.X1).unsqueeze(0).unsqueeze(0),torch.stack(((torch.reshape(s[2,:],(self.X2.shape)))/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,(torch.reshape(s[1,:],(self.X1.shape)))/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,(torch.reshape(s[0,:],(self.X0.shape)))/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0),padding_mode='border',mode=interpmode)) + (torch.reshape(s[1,:],(self.X1.shape)))
-        phiinv2_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv2_gpu-self.X2).unsqueeze(0).unsqueeze(0),torch.stack(((torch.reshape(s[2,:],(self.X2.shape)))/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,(torch.reshape(s[1,:],(self.X1.shape)))/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,(torch.reshape(s[0,:],(self.X0.shape)))/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0),padding_mode='border',mode=interpmode)) + (torch.reshape(s[2,:],(self.X2.shape)))
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
         return phiinv0_gpu, phiinv1_gpu, phiinv2_gpu
     
     # deform template forward using affine without translation
@@ -1133,22 +912,15 @@ class LDDMM:
         #Ys = affineB[1,0]*self.X0 + affineB[1,1]*self.X1 + affineB[1,2]*self.X2
         #Zs = affineB[2,0]*self.X0 + affineB[2,1]*self.X1 + affineB[2,2]*self.X2
         s = torch.mm(affineB[0:3,0:3],torch.stack( (torch.reshape(self.X0,(-1,)),torch.reshape(self.X1,(-1,)),torch.reshape(self.X2,(-1,))), dim=0))
-<<<<<<< HEAD
         phiinv0_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv0_gpu-self.X0).unsqueeze(0).unsqueeze(0),torch.stack(((torch.reshape(s[2,:],(self.X2.shape)))/(self.nx[2]*self.dx[2]-self.dx[2])*2,(torch.reshape(s[1,:],(self.X1.shape)))/(self.nx[1]*self.dx[1]-self.dx[1])*2,(torch.reshape(s[0,:],(self.X0.shape)))/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='border')) + (torch.reshape(s[0,:],(self.X0.shape)))
         phiinv1_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv1_gpu-self.X1).unsqueeze(0).unsqueeze(0),torch.stack(((torch.reshape(s[2,:],(self.X2.shape)))/(self.nx[2]*self.dx[2]-self.dx[2])*2,(torch.reshape(s[1,:],(self.X1.shape)))/(self.nx[1]*self.dx[1]-self.dx[1])*2,(torch.reshape(s[0,:],(self.X0.shape)))/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='border')) + (torch.reshape(s[1,:],(self.X1.shape)))
         phiinv2_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv2_gpu-self.X2).unsqueeze(0).unsqueeze(0),torch.stack(((torch.reshape(s[2,:],(self.X2.shape)))/(self.nx[2]*self.dx[2]-self.dx[2])*2,(torch.reshape(s[1,:],(self.X1.shape)))/(self.nx[1]*self.dx[1]-self.dx[1])*2,(torch.reshape(s[0,:],(self.X0.shape)))/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='border')) + (torch.reshape(s[2,:],(self.X2.shape)))
-=======
-        phiinv0_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv0_gpu-self.X0).unsqueeze(0).unsqueeze(0),torch.stack(((torch.reshape(s[2,:],(self.X2.shape)))/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,(torch.reshape(s[1,:],(self.X1.shape)))/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,(torch.reshape(s[0,:],(self.X0.shape)))/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0),padding_mode='border')) + (torch.reshape(s[0,:],(self.X0.shape)))
-        phiinv1_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv1_gpu-self.X1).unsqueeze(0).unsqueeze(0),torch.stack(((torch.reshape(s[2,:],(self.X2.shape)))/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,(torch.reshape(s[1,:],(self.X1.shape)))/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,(torch.reshape(s[0,:],(self.X0.shape)))/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0),padding_mode='border')) + (torch.reshape(s[1,:],(self.X1.shape)))
-        phiinv2_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv2_gpu-self.X2).unsqueeze(0).unsqueeze(0),torch.stack(((torch.reshape(s[2,:],(self.X2.shape)))/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,(torch.reshape(s[1,:],(self.X1.shape)))/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,(torch.reshape(s[0,:],(self.X0.shape)))/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0),padding_mode='border')) + (torch.reshape(s[2,:],(self.X2.shape)))
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
         return phiinv0_gpu, phiinv1_gpu, phiinv2_gpu
     
     # deform template forward using affine translation
     def forwardDeformationAffineT(self,affineA,phiinv0_gpu,phiinv1_gpu,phiinv2_gpu):
         affineB = torch.inverse(affineA)
         s = torch.stack( (torch.reshape(self.X0,(-1,)),torch.reshape(self.X1,(-1,)),torch.reshape(self.X2,(-1,))), dim=0) + torch.reshape(affineB[0:3,3],(3,1)).expand(-1,self.X0.numel())
-<<<<<<< HEAD
         phiinv0_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv0_gpu-self.X0).unsqueeze(0).unsqueeze(0),torch.stack(((torch.reshape(s[2,:],(self.X2.shape)))/(self.nx[2]*self.dx[2]-self.dx[2])*2,(torch.reshape(s[1,:],(self.X1.shape)))/(self.nx[1]*self.dx[1]-self.dx[1])*2,(torch.reshape(s[0,:],(self.X0.shape)))/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='border')) + (torch.reshape(s[0,:],(self.X0.shape)))
         phiinv1_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv1_gpu-self.X1).unsqueeze(0).unsqueeze(0),torch.stack(((torch.reshape(s[2,:],(self.X2.shape)))/(self.nx[2]*self.dx[2]-self.dx[2])*2,(torch.reshape(s[1,:],(self.X1.shape)))/(self.nx[1]*self.dx[1]-self.dx[1])*2,(torch.reshape(s[0,:],(self.X0.shape)))/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='border')) + (torch.reshape(s[1,:],(self.X1.shape)))
         phiinv2_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv2_gpu-self.X2).unsqueeze(0).unsqueeze(0),torch.stack(((torch.reshape(s[2,:],(self.X2.shape)))/(self.nx[2]*self.dx[2]-self.dx[2])*2,(torch.reshape(s[1,:],(self.X1.shape)))/(self.nx[1]*self.dx[1]-self.dx[1])*2,(torch.reshape(s[0,:],(self.X0.shape)))/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='border')) + (torch.reshape(s[2,:],(self.X2.shape)))
@@ -1160,25 +932,11 @@ class LDDMM:
         Jbar = torch.sum(J*weight*self.M)/torch.sum(weight*self.M)
         VarI = torch.sum(((I-Ibar)*weight*self.M)**2)/torch.sum(weight*self.M)
         CovIJ = torch.sum((I-Ibar)*(J-Jbar)*weight*self.M)/torch.sum(weight*self.M)
-=======
-        phiinv0_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv0_gpu-self.X0).unsqueeze(0).unsqueeze(0),torch.stack(((torch.reshape(s[2,:],(self.X2.shape)))/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,(torch.reshape(s[1,:],(self.X1.shape)))/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,(torch.reshape(s[0,:],(self.X0.shape)))/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0),padding_mode='border')) + (torch.reshape(s[0,:],(self.X0.shape)))
-        phiinv1_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv1_gpu-self.X1).unsqueeze(0).unsqueeze(0),torch.stack(((torch.reshape(s[2,:],(self.X2.shape)))/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,(torch.reshape(s[1,:],(self.X1.shape)))/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,(torch.reshape(s[0,:],(self.X0.shape)))/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0),padding_mode='border')) + (torch.reshape(s[1,:],(self.X1.shape)))
-        phiinv2_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv2_gpu-self.X2).unsqueeze(0).unsqueeze(0),torch.stack(((torch.reshape(s[2,:],(self.X2.shape)))/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,(torch.reshape(s[1,:],(self.X1.shape)))/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,(torch.reshape(s[0,:],(self.X0.shape)))/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0),padding_mode='border')) + (torch.reshape(s[2,:],(self.X2.shape)))
-        return phiinv0_gpu, phiinv1_gpu, phiinv2_gpu
-    
-    # compute contrast correction values
-    def computeContrastTransform(self,I,J):
-        Ibar = torch.sum(I)/np.prod(I.shape)
-        Jbar = torch.sum(J)/np.prod(J.shape)
-        VarI = torch.sum((I-Ibar)**2)/np.prod(I.shape)
-        CovIJ = torch.sum((I-Ibar)*(J-Jbar))/np.prod(J.shape)
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
         return Ibar, Jbar, VarI, CovIJ
     
     # contrast correction convenience function
     def runContrastCorrection(self):
         for i in self.params['cc_channels']:
-<<<<<<< HEAD
             if i in self.params['we_channels'] and self.params['we'] != 0:
                 self.ccIbar[i],self.ccJbar[i],self.ccVarI[i],self.ccCovIJ[i] = self.computeLinearContrastTransform(self.It[i][-1], self.J[i],self.W[i][0])
             else:
@@ -1209,9 +967,6 @@ class LDDMM:
             if i in self.params['we_channels']:
                 for ii in range(self.params['we']):
                     self.we_C[i][ii] = torch.sum(self.W[i][ii] * self.J[i]) / torch.sum(self.W[i][ii] + 1.0e-6)
-=======
-            self.ccIbar[i],self.ccJbar[i],self.ccVarI[i],self.ccCovIJ[i] = self.computeContrastTransform(self.It[i][-1], self.J[i])
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
         
         return
     
@@ -1237,7 +992,6 @@ class LDDMM:
     def calculateMatchingEnergyMSE(self):
         lambda1 = [None]*len(self.I)
         EM = 0
-<<<<<<< HEAD
         if self.params['we'] == 0:
             for i in range(len(self.I)):
                 lambda1[i] = -1*self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])/self.params['sigma'][i]**2 # may not need to store this
@@ -1255,11 +1009,6 @@ class LDDMM:
                     lambda1[i] = -1*self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])/self.params['sigma'][i]**2 # may not need to store this
                     EM += torch.sum(self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
         
-=======
-        for i in range(len(self.I)):
-            lambda1[i] = -1*self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])/self.params['sigma'][i]**2 # may not need to store this
-            EM += torch.sum(self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
         return lambda1, EM
     
     # compute matching energy
@@ -1274,7 +1023,6 @@ class LDDMM:
     # compute matching energy without lambda1
     def calculateMatchingEnergyMSEOnly(self, I):
         EM = 0
-<<<<<<< HEAD
         if self.params['we'] == 0:
             for i in range(len(self.I)):
                 EM += torch.sum(self.M*( ((I[i] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
@@ -1289,10 +1037,6 @@ class LDDMM:
                 else:
                     EM += torch.sum(self.M*( ((I[i] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
             
-=======
-        for i in range(len(self.I)):
-            EM += torch.sum(self.M*( ((I[i] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
         return EM
     
     # compute matching energy without lambda1
@@ -1307,7 +1051,6 @@ class LDDMM:
         flag = False
         if len(self.EAll) > 1:
             if self.params['optimizer'] == 'gdr':
-<<<<<<< HEAD
                 if self.params['checkaffinestep'] == 0 and self.params['do_affine'] == 0:
                     # energy increased
                     if self.EAll[-1] >= self.EAll[-2] or self.EAll[-1]/self.EAll[-2] > 0.99999:
@@ -1330,22 +1073,6 @@ class LDDMM:
                     
                     if self.EMAffineT[-1] > self.EMAffineR[-1]:
                         self.GDBetaAffineT *= 0.7
-=======
-                if self.params['checkaffinestep'] == 0 or self.params['doaffine'] == 0:
-                    # energy increased
-                    if self.EAll[-1] > self.EAll[-2]:
-                        self.GDBeta *= 0.7
-                elif self.params['checkaffinestep'] == 1 and self.params['doaffine'] == 1:
-                    # if diffeo energy increased
-                    if self.ERAll[-1] + self.EMDiffeo[-1] > self.EAll[-2]:
-                        self.GDBeta *= 0.8
-                    
-                    if self.EMAffineR[-1] > self.EMDiffeo[-1]:
-                        self.GDBetaAffineR *= 1.0
-                    
-                    if self.EMAffineT[-1] > self.EMAffineR[-1]:
-                        self.GDBetaAffineT *= 1.0
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
             
             elif self.params['optimizer'] == 'gdw':
                 # energy increased
@@ -1380,12 +1107,7 @@ class LDDMM:
     
     
     # compute gradient of affine transformation
-<<<<<<< HEAD
     def calculateGradientA(self,affineA,lambda1,mode='affine'):
-=======
-    # TODO: can i change the order of diffeo and A to remove one image gradient calculation?
-    def calculateGradientA(self,affineA,lambda1):
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
         affineB = torch.inverse(affineA)
         gi_x = [None]*len(self.I)
         gi_y = [None]*len(self.I)
@@ -1402,7 +1124,6 @@ class LDDMM:
                     #AdABX = AdAB[0,0]*self.X0 + AdAB[0,1]*self.X1 + AdAB[0,2]*self.X2 + AdAB[0,3]
                     #AdABY = AdAB[1,0]*self.X0 + AdAB[1,1]*self.X1 + AdAB[1,2]*self.X2 + AdAB[1,3]
                     #AdABZ = AdAB[2,0]*self.X0 + AdAB[2,1]*self.X1 + AdAB[2,2]*self.X2 + AdAB[2,3]
-<<<<<<< HEAD
                     if i == 0:
                         self.gradA[r,c] = torch.sum( lambda1[i] * ( gi_x[i]*(AdAB[0,0]*(self.X0) + AdAB[0,1]*(self.X1) + AdAB[0,2]*(self.X2) + AdAB[0,3]) + gi_y[i]*(AdAB[1,0]*(self.X0) + AdAB[1,1]*(self.X1) + AdAB[1,2]*(self.X2) + AdAB[1,3]) + gi_z[i]*(AdAB[2,0]*(self.X0) + AdAB[2,1]*(self.X1) + AdAB[2,2]*(self.X2) + AdAB[2,3]) ) ) * self.dx[0]*self.dx[1]*self.dx[2]
                     else:
@@ -1412,28 +1133,13 @@ class LDDMM:
         # if rigid
         if mode == 'rigid':
             self.gradA -= torch.transpose(self.gradA,0,1)
-=======
-                    # check if using lambda1 is faster
-                    # TODO: this product has major bit depth issues, order of magnitude difference in gradient
-                    if i == 0:
-                        self.gradA[r,c] = torch.sum( lambda1[i] * ( gi_x[i]*(AdAB[0,0]*self.X0 + AdAB[0,1]*self.X1 + AdAB[0,2]*self.X2 + AdAB[0,3]) + gi_y[i]*(AdAB[1,0]*self.X0 + AdAB[1,1]*self.X1 + AdAB[1,2]*self.X2 + AdAB[1,3]) + gi_z[i]*(AdAB[2,0]*self.X0 + AdAB[2,1]*self.X1 + AdAB[2,2]*self.X2 + AdAB[2,3]) ) ) * self.dx[0]*self.dx[1]*self.dx[2]
-                    else:
-                        self.gradA[r,c] += torch.sum( lambda1[i] * ( gi_x[i]*(AdAB[0,0]*self.X0 + AdAB[0,1]*self.X1 + AdAB[0,2]*self.X2 + AdAB[0,3]) + gi_y[i]*(AdAB[1,0]*self.X0 + AdAB[1,1]*self.X1 + AdAB[1,2]*self.X2 + AdAB[1,3]) + gi_z[i]*(AdAB[2,0]*self.X0 + AdAB[2,1]*self.X1 + AdAB[2,2]*self.X2 + AdAB[2,3]) ) ) * self.dx[0]*self.dx[1]*self.dx[2]
-                    #self.gradA[r,c] = torch.sum( lambda1 * ( gi_y*(AdAB[0,0]*self.X1 + AdAB[0,1]*self.X0 + AdAB[0,2]*self.X2 + AdAB[0,3]) + gi_x*(AdAB[1,0]*self.X1 + AdAB[1,1]*self.X0 + AdAB[1,2]*self.X2 + AdAB[1,3]) + gi_z*(AdAB[2,0]*self.X1 + AdAB[2,1]*self.X0 + AdAB[2,2]*self.X2 + AdAB[2,3]) ) ) * self.dx[0]*self.dx[1]*self.dx[2]
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
     
     # compute gradient per time step for time varying velocity field parameterization
     def calculateGradientVt(self,lambda1,t,phiinv0_gpu,phiinv1_gpu,phiinv2_gpu):
         # update phiinv using method of characteristics, note "+" because we are integrating backward
-<<<<<<< HEAD
         phiinv0_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv0_gpu-self.X0).unsqueeze(0).unsqueeze(0),torch.stack(((self.X2+self.vt2[t]*self.dt)/(self.nx[2]*self.dx[2]-self.dx[2])*2,(self.X1+self.vt1[t]*self.dt)/(self.nx[1]*self.dx[1]-self.dx[1])*2,(self.X0+self.vt0[t]*self.dt)/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='border')) + (self.X0+self.vt0[t]*self.dt)
         phiinv1_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv1_gpu-self.X1).unsqueeze(0).unsqueeze(0),torch.stack(((self.X2+self.vt2[t]*self.dt)/(self.nx[2]*self.dx[2]-self.dx[2])*2,(self.X1+self.vt1[t]*self.dt)/(self.nx[1]*self.dx[1]-self.dx[1])*2,(self.X0+self.vt0[t]*self.dt)/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='border')) + (self.X1+self.vt1[t]*self.dt)
         phiinv2_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv2_gpu-self.X2).unsqueeze(0).unsqueeze(0),torch.stack(((self.X2+self.vt2[t]*self.dt)/(self.nx[2]*self.dx[2]-self.dx[2])*2,(self.X1+self.vt1[t]*self.dt)/(self.nx[1]*self.dx[1]-self.dx[1])*2,(self.X0+self.vt0[t]*self.dt)/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='border')) + (self.X2+self.vt2[t]*self.dt)
-=======
-        phiinv0_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv0_gpu-self.X0).unsqueeze(0).unsqueeze(0),torch.stack(((self.X2+self.vt2[t]*self.dt)/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,(self.X1+self.vt1[t]*self.dt)/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,(self.X0+self.vt0[t]*self.dt)/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0),padding_mode='border')) + (self.X0+self.vt0[t]*self.dt)
-        phiinv1_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv1_gpu-self.X1).unsqueeze(0).unsqueeze(0),torch.stack(((self.X2+self.vt2[t]*self.dt)/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,(self.X1+self.vt1[t]*self.dt)/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,(self.X0+self.vt0[t]*self.dt)/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0),padding_mode='border')) + (self.X1+self.vt1[t]*self.dt)
-        phiinv2_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv2_gpu-self.X2).unsqueeze(0).unsqueeze(0),torch.stack(((self.X2+self.vt2[t]*self.dt)/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,(self.X1+self.vt1[t]*self.dt)/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,(self.X0+self.vt0[t]*self.dt)/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0),padding_mode='border')) + (self.X2+self.vt2[t]*self.dt)
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
         
         # find the determinant of Jacobian
         phiinv0_0,phiinv0_1,phiinv0_2 = self.torch_gradient(phiinv0_gpu,self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)
@@ -1445,30 +1151,19 @@ class LDDMM:
         
         # deform phiinv back by affine transform if asked for
         # is this accumulating?
-<<<<<<< HEAD
         #if self.params['do_affine'] == 1:
-=======
-        #if self.params['doaffine'] == 1:
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
         #    phiinv0_gpu = self.affineA[0,0]*phiinv0_gpu + self.affineA[0,1]*phiinv1_gpu + self.affineA[0,2]*phiinv2_gpu + self.affineA[0,3]
         #    phiinv1_gpu = self.affineA[1,0]*phiinv0_gpu + self.affineA[1,1]*phiinv1_gpu + self.affineA[1,2]*phiinv2_gpu + self.affineA[1,3]
         #    phiinv2_gpu = self.affineA[2,0]*phiinv0_gpu + self.affineA[2,1]*phiinv1_gpu + self.affineA[2,2]*phiinv2_gpu + self.affineA[2,3]
         
         for i in range(len(self.I)):
             # find lambda_t
-<<<<<<< HEAD
             #if not hasattr(self, 'affineA') or torch.all(torch.eq(self.affineA,torch.tensor(np.eye(4)).type(self.params['dtype']).to(device=self.params['cuda']))):
             if not hasattr(self, 'affineA'):
             #if self.params['do_affine'] == 0:
                 lambdat = torch.squeeze(torch.nn.functional.grid_sample(lambda1[i].unsqueeze(0).unsqueeze(0), torch.stack((phiinv2_gpu/(self.nx[2]*self.dx[2]-self.dx[2])*2,phiinv1_gpu/(self.nx[1]*self.dx[1]-self.dx[1])*2,phiinv0_gpu/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='zeros'))*detjac
             else:
                 lambdat = torch.squeeze(torch.nn.functional.grid_sample(lambda1[i].unsqueeze(0).unsqueeze(0), torch.stack((((self.affineA[2,0]*(phiinv0_gpu)) + (self.affineA[2,1]*(phiinv1_gpu)) + (self.affineA[2,2]*(phiinv2_gpu)) + self.affineA[2,3])/(self.nx[2]*self.dx[2]-self.dx[2])*2,((self.affineA[1,0]*(phiinv0_gpu)) + (self.affineA[1,1]*(phiinv1_gpu)) + (self.affineA[1,2]*(phiinv2_gpu)) + self.affineA[1,3])/(self.nx[1]*self.dx[1]-self.dx[1])*2,((self.affineA[0,0]*(phiinv0_gpu)) + (self.affineA[0,1]*(phiinv1_gpu)) + (self.affineA[0,2]*(phiinv2_gpu)) + self.affineA[0,3])/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='zeros'))*detjac*torch.abs(torch.det(self.affineA))
-=======
-            if self.params['doaffine'] == 0:
-                lambdat = torch.squeeze(torch.nn.functional.grid_sample(lambda1[i].unsqueeze(0).unsqueeze(0), torch.stack((phiinv2_gpu/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,phiinv1_gpu/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,phiinv0_gpu/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0),padding_mode='border'))*detjac
-            else:
-                lambdat = torch.squeeze(torch.nn.functional.grid_sample(lambda1[i].unsqueeze(0).unsqueeze(0), torch.stack(((self.affineA[2,0]*phiinv0_gpu + self.affineA[2,1]*phiinv1_gpu + self.affineA[2,2]*phiinv2_gpu + self.affineA[2,3])/(self.nx[2]*self.dx[2]-self.dx[2])*2-1,(self.affineA[1,0]*phiinv0_gpu + self.affineA[1,1]*phiinv1_gpu + self.affineA[1,2]*phiinv2_gpu + self.affineA[1,3])/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,(self.affineA[0,0]*phiinv0_gpu + self.affineA[0,1]*phiinv1_gpu + self.affineA[0,2]*phiinv2_gpu + self.affineA[0,3])/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0),padding_mode='border'))*detjac*torch.abs(torch.det(self.affineA))
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
             
             # get the gradient of the image at this time
             # is there a row column flip in matlab versus my torch_gradient function? yes, there is.
@@ -1489,13 +1184,8 @@ class LDDMM:
     # compute gradient per time step for time varying velocity field parameterization
     def calculateGradientVt2d(self,lambda1,t,phiinv0_gpu,phiinv1_gpu):
         # update phiinv using method of characteristics, note "+" because we are integrating backward
-<<<<<<< HEAD
         phiinv0_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv0_gpu-self.X0).unsqueeze(0).unsqueeze(0),torch.stack(((self.X1+self.vt1[t]*self.dt)/(self.nx[1]*self.dx[1]-self.dx[1])*2,(self.X0+self.vt0[t]*self.dt)/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=2).unsqueeze(0),padding_mode='border')) + (self.X0+self.vt0[t]*self.dt)
         phiinv1_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv1_gpu-self.X1).unsqueeze(0).unsqueeze(0),torch.stack(((self.X1+self.vt1[t]*self.dt)/(self.nx[1]*self.dx[1]-self.dx[1])*2,(self.X0+self.vt0[t]*self.dt)/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=2).unsqueeze(0),padding_mode='border')) + (self.X1+self.vt1[t]*self.dt)        
-=======
-        phiinv0_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv0_gpu-self.X0).unsqueeze(0).unsqueeze(0),torch.stack(((self.X1+self.vt1[t]*self.dt)/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,(self.X0+self.vt0[t]*self.dt)/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=2).unsqueeze(0),padding_mode='border')) + (self.X0+self.vt0[t]*self.dt)
-        phiinv1_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv1_gpu-self.X1).unsqueeze(0).unsqueeze(0),torch.stack(((self.X1+self.vt1[t]*self.dt)/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,(self.X0+self.vt0[t]*self.dt)/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=2).unsqueeze(0),padding_mode='border')) + (self.X1+self.vt1[t]*self.dt)        
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
         
         # find the determinant of Jacobian
         phiinv0_0,phiinv0_1 = self.torch_gradient2d(phiinv0_gpu,self.dx[0],self.dx[1],self.grad_divisor_x,self.grad_divisor_y)
@@ -1504,27 +1194,16 @@ class LDDMM:
         self.detjac[t] = detjac.clone()
         '''
         # deform phiinv back by affine transform if asked for
-<<<<<<< HEAD
         if self.params['do_affine'] == 1:
-=======
-        if self.params['doaffine'] == 1:
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
             phiinv0_gpu = self.affineA[0,0]*phiinv0_gpu + self.affineA[0,1]*phiinv1_gpu + self.affineA[0,2]
             phiinv1_gpu = self.affineA[1,0]*phiinv0_gpu + self.affineA[1,1]*phiinv1_gpu + self.affineA[1,2]
         '''
         for i in range(len(self.I)):
             # find lambda_t
-<<<<<<< HEAD
             #if self.params['do_affine'] == 0:
             lambdat = torch.squeeze(torch.nn.functional.grid_sample(lambda1[i].unsqueeze(0).unsqueeze(0), torch.stack((phiinv1_gpu/(self.nx[1]*self.dx[1]-self.dx[1])*2,phiinv0_gpu/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=2).unsqueeze(0),padding_mode='zeros'))*detjac
             #else:
             #    lambdat = torch.squeeze(torch.nn.functional.grid_sample(lambda1.unsqueeze(0).unsqueeze(0), torch.stack((phiinv1_gpu/(self.nx[1]*self.dx[1]-self.dx[1])*2,phiinv0_gpu/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='border'))*detjac*torch.det(self.affineA)
-=======
-            #if self.params['doaffine'] == 0:
-            lambdat = torch.squeeze(torch.nn.functional.grid_sample(lambda1[i].unsqueeze(0).unsqueeze(0), torch.stack((phiinv1_gpu/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,phiinv0_gpu/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=2).unsqueeze(0),padding_mode='border'))*detjac
-            #else:
-            #    lambdat = torch.squeeze(torch.nn.functional.grid_sample(lambda1.unsqueeze(0).unsqueeze(0), torch.stack((phiinv1_gpu/(self.nx[1]*self.dx[1]-self.dx[1])*2-1,phiinv0_gpu/(self.nx[0]*self.dx[0]-self.dx[0])*2-1),dim=3).unsqueeze(0),padding_mode='border'))*detjac*torch.det(self.affineA)
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
             # get the gradient of the image at this time
             # is there a row column flip in matlab versus my torch_gradient function? yes, there is.
             if i == 0:
@@ -1574,7 +1253,6 @@ class LDDMM:
     
     
     # for section alignment
-<<<<<<< HEAD
     def sa(self, input, atlas, a=None, b=None, theta=None, dx=None, nx=None, niter=250, dim=2,missingslices=[],epsilonxy=0.0000025, epsilontheta=0.00000055,minepsilonxy=float(1e-20),minepsilontheta=2.0*10**-24,sigmaxy = 0.7*10, sigmatheta = np.pi/180*2*10, sigma_atlas = 1.0, sigma_target = 1.0,sigma_target_radius = 30,min_sigma_target = 1.0,sigma_atlas_radius = 34,min_sigma_atlas = 2.,norm=0,smoothing=1):
         # equivalent of cor_sag_rot
         if dim != 2:
@@ -1617,19 +1295,6 @@ class LDDMM:
                         return -1
                     else:
                         nx = [nx[i] for i in [0, 2, 1]]
-=======
-    def sa(self, input, atlas, a=None, b=None, theta=None, niter=250, dim=2,missingslices=[],epsilonxy=0.0000025, epsilontheta=0.00000055,minepsilonxy=float(1e-20),minepsilontheta=2.0*10**-24,sigmaxy = 0.7*10, sigmatheta = np.pi/180*2*10, sigma_atlas = 1.0, sigma_target = 1.0,sigma_target_radius = 30,min_sigma_target = 1.0,sigma_atlas_radius = 34,min_sigma_atlas = 2.,norm=0):
-        # equivalent of cor_sag_rot
-        if dim != 2:
-            target = torch.transpose(input,dim, 2).clone()
-            template = torch.transpose(atlas,dim, 2).clone()
-            if dim == 0:
-                dx = [self.dx[i] for i in [2, 1, 0]]
-                nx = [self.nx[i] for i in [2, 1, 0]]
-            else:
-                dx = [self.dx[i] for i in [0, 2, 1]]
-                nx = [self.nx[i] for i in [0, 2, 1]]
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
         else:
             target = input.clone()
             template = atlas.clone()
@@ -1681,7 +1346,6 @@ class LDDMM:
         #target_rem = torch.gather(target, 2, torch.Tensor(np.array(slicenumbers).astype(np.int32)).to(device=self.params['cuda'])).clone()
         target_rem = target[:,:,slicenumbers].clone()
         
-<<<<<<< HEAD
         slicecoord = torch.stack([torch.tensor((x+1.0)*dx[2] - dx[2]/2.0).type(self.params['dtype']).to(device=self.params['cuda']) for x in [slicenumbers[0]-2, slicenumbers[0]-1] + slicenumbers + [slicenumbers[-1]+1, slicenumbers[-1]+2]])
         shiftindices = [-2,-1,0,1,2]
         mynumerator = torch.tensor(np.zeros((len(shiftindices), slicecoord.shape[0]))).type(self.params['dtype']).to(device=self.params['cuda'])
@@ -1697,35 +1361,17 @@ class LDDMM:
                 input[:,:,i] = torch.squeeze(torch.nn.functional.conv2d(input[:,:,i].unsqueeze(0).unsqueeze(0),mygauss.unsqueeze(0).unsqueeze(0), stride=1, padding=4))
             for i in range(template.shape[2]):
                 template[:,:,i] = torch.squeeze(torch.nn.functional.conv2d(template[:,:,i].unsqueeze(0).unsqueeze(0),mygauss.unsqueeze(0).unsqueeze(0), stride=1, padding=4))
-=======
-        slicecoord = torch.stack([torch.tensor((x+1.0)*dx[2] - dx[2]/2.0).type(self.params['dtype']).to(device=self.params['cuda']) for x in slicenumbers])
-        shiftindices = [-2,-1,0,1,2]
-        mynumerator = torch.tensor(np.zeros((len(shiftindices), slicecoord.shape[0]))).type(self.params['dtype']).to(device=self.params['cuda'])
-        dz = ((torch.roll(slicecoord,-1) - slicecoord) - (torch.roll(slicecoord,1) - slicecoord)) / 2.0
-        # account for rollover
-        dz[0] = dz[1]
-        dz[-1] = dz[-2]
-        # smooth?
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
         
         # downsample?
         
         # scale the image?
         if norm==1:
-<<<<<<< HEAD
             (scalelist,_) = torch.topk(torch.flatten(input),100000)
             scale = scalelist[99999]
             print(scale)
             #template = template / scale
             target = target/scale
             input = input/scale
-=======
-            (scalelist,_) = torch.topk(torch.flatten(target),100000)
-            scale = scalelist[99999]
-            print(scale)
-            template = template / scale
-            target = target/scale
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
             #template = (template - torch.min(template)) / torch.max((template - torch.min(template)))
             #template = (template - torch.min(template)) / torch.max((template - torch.min(template)))
         else:
@@ -1744,12 +1390,8 @@ class LDDMM:
                 # maybe don't store TX and TY
                 TX = torch.cos(theta[i])*self.saX1 + -1*torch.sin(theta[i])*self.saX0 + a[i]
                 TY = torch.sin(theta[i])*self.saX1 + torch.cos(theta[i])*self.saX0 + b[i]
-<<<<<<< HEAD
                 #target[:,:,i] = torch.squeeze(torch.nn.functional.grid_sample(torch.squeeze(torch.transpose(input.clone(),dim, 2)[:,:,i]/scale).unsqueeze(0).unsqueeze(0),torch.stack( ( (TX)/(nx[1]*dx[1]-dx[1])*2, (TY)/(nx[0]*dx[0]-dx[0])*2 ) ,dim=2).unsqueeze(0),padding_mode='border'))
                 target[:,:,i] = torch.squeeze(torch.nn.functional.grid_sample(torch.squeeze(input[:,:,i]).unsqueeze(0).unsqueeze(0),torch.stack( ( (TX)/(nx[1]*dx[1]-dx[1])*2, (TY)/(nx[0]*dx[0]-dx[0])*2 ) ,dim=2).unsqueeze(0),padding_mode='zeros'))
-=======
-                target[:,:,i] = torch.squeeze(torch.nn.functional.grid_sample(torch.squeeze(torch.transpose(input.clone(),dim, 2)[:,:,i]/scale).unsqueeze(0).unsqueeze(0),torch.stack( ( (TX)/(nx[1]*dx[1]-dx[1])*2, (TY)/(nx[0]*dx[0]-dx[0])*2 ) ,dim=2).unsqueeze(0),padding_mode='border'))
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
                 target_rem[:,:,k] = target[:,:,i].clone()
                 k += 1
             
@@ -1772,31 +1414,18 @@ class LDDMM:
             
             # this array is mirrored left-right for some reason
             # correct torch.roll(target) to account for zero padding
-<<<<<<< HEAD
             LZTI = (torch.reshape( mynumerator[3,:] / ( (torch.roll(slicecoord,1) - slicecoord) * (torch.roll(slicecoord,1) - torch.roll(slicecoord,-1)) * (torch.roll(slicecoord,1) - torch.roll(slicecoord,2)) * (torch.roll(slicecoord,1) - torch.roll(slicecoord,-2)) ), [1,1,slicecoord.shape[0] ] ).expand([target_rem.shape[0], target_rem.shape[1], -1] ) * torch.roll(torch.nn.functional.pad(target_rem,(2,2),'constant',0),1,dims=2))[:,:,2:-2] \
                 + (torch.reshape( mynumerator[4,:] / ( (torch.roll(slicecoord,2) - slicecoord) * (torch.roll(slicecoord,2) - torch.roll(slicecoord,-1)) * (torch.roll(slicecoord,2) - torch.roll(slicecoord,-2)) * (torch.roll(slicecoord,2) - torch.roll(slicecoord,1)) ), [1,1,slicecoord.shape[0]]).expand( [target_rem.shape[0],target_rem.shape[1], -1] ) * torch.roll(torch.nn.functional.pad(target_rem,(2,2),'constant',0),2,dims=2))[:,:,2:-2] \
                 + (torch.reshape( mynumerator[1,:] / ( (torch.roll(slicecoord,-1) - slicecoord) * (torch.roll(slicecoord,-1) - torch.roll(slicecoord,1)) * (torch.roll(slicecoord,-1) - torch.roll(slicecoord,-2)) * (torch.roll(slicecoord,-1) - torch.roll(slicecoord,2)) ), [1,1,slicecoord.shape[0]]).expand( [target_rem.shape[0],target_rem.shape[1],-1] ) * torch.roll(torch.nn.functional.pad(target_rem,(2,2),'constant',0),-1,dims=2))[:,:,2:-2] \
                 + (torch.reshape( mynumerator[0,:] / ( (torch.roll(slicecoord,-2) - slicecoord) * (torch.roll(slicecoord,-2) - torch.roll(slicecoord,1)) * (torch.roll(slicecoord,-2) - torch.roll(slicecoord,2)) * (torch.roll(slicecoord,-2) - torch.roll(slicecoord,-1)) ), [1,1,slicecoord.shape[0]]).expand( [target_rem.shape[0],target_rem.shape[1],-1] ) * torch.roll(torch.nn.functional.pad(target_rem,(2,2),'constant',0),-2,dims=2))[:,:,2:-2] \
                 + (torch.reshape( mynumerator[2,:] / ( (slicecoord - torch.roll(slicecoord,1)) * (slicecoord - torch.roll(slicecoord,2)) * (slicecoord - torch.roll(slicecoord,-1)) * (slicecoord - torch.roll(slicecoord,-2)) ), [1,1,slicecoord.shape[0]]).expand( [target_rem.shape[0],target_rem.shape[1],-1] ) * torch.nn.functional.pad(target_rem,(2,2),'constant',0) )[:,:,2:-2]
-=======
-            LZTI = torch.reshape( mynumerator[3,:] / ( (torch.roll(slicecoord,1) - slicecoord) * (torch.roll(slicecoord,1) - torch.roll(slicecoord,-1)) * (torch.roll(slicecoord,1) - torch.roll(slicecoord,2)) * (torch.roll(slicecoord,1) - torch.roll(slicecoord,-2)) ), [1,1,slicecoord.shape[0] ] ).expand([target_rem.shape[0], target_rem.shape[1], -1] ) * torch.roll(torch.nn.functional.pad(target_rem,(2,2),'constant',0),1,dims=2)[:,:,2:-2] \
-                + torch.reshape( mynumerator[4,:] / ( (torch.roll(slicecoord,2) - slicecoord) * (torch.roll(slicecoord,2) - torch.roll(slicecoord,-1)) * (torch.roll(slicecoord,2) - torch.roll(slicecoord,-2)) * (torch.roll(slicecoord,2) - torch.roll(slicecoord,1)) ), [1,1,slicecoord.shape[0]]).expand( [target_rem.shape[0],target_rem.shape[1], -1] ) * torch.roll(torch.nn.functional.pad(target_rem,(2,2),'constant',0),2,dims=2)[:,:,2:-2] \
-                + torch.reshape( mynumerator[1,:] / ( (torch.roll(slicecoord,-1) - slicecoord) * (torch.roll(slicecoord,-1) - torch.roll(slicecoord,1)) * (torch.roll(slicecoord,-1) - torch.roll(slicecoord,-2)) * (torch.roll(slicecoord,-1) - torch.roll(slicecoord,2)) ), [1,1,slicecoord.shape[0]]).expand( [target_rem.shape[0],target_rem.shape[1],-1] ) * torch.roll(torch.nn.functional.pad(target_rem,(2,2),'constant',0),-1,dims=2)[:,:,2:-2] \
-                + torch.reshape( mynumerator[0,:] / ( (torch.roll(slicecoord,-2) - slicecoord) * (torch.roll(slicecoord,-2) - torch.roll(slicecoord,1)) * (torch.roll(slicecoord,-2) - torch.roll(slicecoord,2)) * (torch.roll(slicecoord,-2) - torch.roll(slicecoord,-1)) ), [1,1,slicecoord.shape[0]]).expand( [target_rem.shape[0],target_rem.shape[1],-1] ) * torch.roll(torch.nn.functional.pad(target_rem,(2,2),'constant',0),-2,dims=2)[:,:,2:-2] \
-                + torch.reshape( mynumerator[2,:] / ( (slicecoord - torch.roll(slicecoord,1)) * (slicecoord - torch.roll(slicecoord,2)) * (slicecoord - torch.roll(slicecoord,-1)) * (slicecoord - torch.roll(slicecoord,-2)) ), [1,1,slicecoord.shape[0]]).expand( [target_rem.shape[0],target_rem.shape[1],-1] ) * target_rem
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
             
             # compute energies
             last_E = E.clone()
             Eimtarget = torch.sum(1.0 / torch.squeeze(sigma_target_vec)**2 * torch.squeeze(torch.sum(torch.sum(-LZTI * target_rem,dim=0),dim=0)) ) * np.prod(dx)/2.0
             Eimatlas = torch.sum(1.0 / sigma_atlas_vec**2 * torch.squeeze(torch.sum(torch.sum( (target_rem - template[:,:,slicenumbers])**2 , dim=0),dim=0))) * np.prod(dx)/2.0
-<<<<<<< HEAD
             Eregxy = torch.sum((a[slicenumbers]**2 + b[slicenumbers]**2)*dz)/2.0/sigmaxy**2/slicecoord[2:-2].shape[0]
             Eregtheta = torch.sum((theta[slicenumbers]**2)*dz)/2.0/sigmatheta**2/slicecoord[2:-2].shape[0]
-=======
-            Eregxy = torch.sum((a[slicenumbers]**2 + b[slicenumbers]**2)*dz)/2.0/sigmaxy**2/slicecoord.shape[0]
-            Eregtheta = torch.sum((theta[slicenumbers]**2)*dz)/2.0/sigmatheta**2/slicecoord.shape[0]
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
             E = Eimtarget + Eimatlas + Eregxy + Eregtheta
             
             # adjust optimization parameters
@@ -1863,7 +1492,6 @@ class LDDMM:
             
             iter += 1
         
-<<<<<<< HEAD
         return a, b, theta, target*scale, epsilonxy, epsilontheta
     
     # apply stack alignment transform
@@ -1939,9 +1567,6 @@ class LDDMM:
             out[:,:,i] = torch.squeeze(torch.nn.functional.grid_sample(torch.squeeze(target[:,:,i]).unsqueeze(0).unsqueeze(0),torch.stack( ( (TX)/(nx[1]*dx[1]-dx[1])*2, (TY)/(nx[0]*dx[0]-dx[0])*2 ) ,dim=2).unsqueeze(0),padding_mode='zeros'))
         
         return out
-=======
-        return a, b, theta, target, epsilonxy, epsilontheta
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
     
     # main loop
     def registration(self):
@@ -1959,7 +1584,6 @@ class LDDMM:
                 if self.params['cc'] == 1:
                     self.runContrastCorrection()
                 
-<<<<<<< HEAD
                 # update weight estimation
                 if self.params['we'] > 0 and np.mod(it,self.params['nMstep']) == 0:
                     self.computeWeightEstimation()
@@ -1969,9 +1593,6 @@ class LDDMM:
                 else:
                     ER = torch.tensor(0.0).type(self.params['dtype'])
                 
-=======
-                ER = self.calculateRegularizationEnergyVt()
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
                 lambda1,EM = self.calculateMatchingEnergyMSE()
             
             # save variables
@@ -1987,7 +1608,6 @@ class LDDMM:
             # print function
             if it > 0:
                 start_time = end_time
-<<<<<<< HEAD
             else:
                 total_time = 0.0
             
@@ -1999,22 +1619,11 @@ class LDDMM:
                     print("iter: " + str(it) + ", E= {:.3f}, ER= {:.3f}, EM= {:.3f}, epd= {:.3f}, del_Ev= {:.4f}, del_El= {:.4f}, del_Et= {:.4f}, time= {:.2f}s.".format(E.item(),ER.item(),EM.item(),(self.GDBeta*self.params['epsilon']).item(),self.ERAll[-1] + self.EMDiffeo[-1] - self.EAll[-2], self.EMAffineR[-1] - self.EMDiffeo[-1], self.EMAffineT[-1] - self.EMAffineR[-1],end_time-start_time))
                 else:
                     print("iter: " + str(it) + ", E= {:.3f}, ER= {:.3f}, EM= {:.3f}, epd= {:.3f}, time= {:.2f}s.".format(E.item(),ER.item(),EM.item(),(self.GDBeta*self.params['epsilon']).item(),end_time-start_time))
-=======
-            
-            end_time = time.time()
-            if it > 0:
-                #print('iter: ' + str(it) + ', E = ' + str(E.item()) + ', ER = ' + str(ER.item()) + ', EM = ' + str(EM.item()) + ', ep = ' + str((self.GDBeta*self.params['epsilon']).item()) + ', time = ' + str(end_time-start_time) + '.')
-                if self.params['checkaffinestep'] == 1 and self.params['doaffine'] == 1:
-                    print("iter: " + str(it) + ", E= {:.3f}, ER= {:.3f}, EM= {:.3f}, epd= {:.3f}, del_Ev= {:.4f}, del_El= {:.4f}, del_Et= {:.4f}, time= {:.2f}.".format(E.item(),ER.item(),EM.item(),(self.GDBeta*self.params['epsilon']).item(),self.ERAll[-1] + self.EMDiffeo[-1] - self.EAll[-2], self.EMAffineR[-1] - self.EMDiffeo[-1], self.EMAffineT[-1] - self.EMAffineR[-1],end_time-start_time))
-                else:
-                    print("iter: " + str(it) + ", E= {:.3f}, ER= {:.3f}, EM= {:.3f}, epd= {:.3f}, time= {:.2f}.".format(E.item(),ER.item(),EM.item(),(self.GDBeta*self.params['epsilon']).item(),end_time-start_time))
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
             else:
                 #print('iter: ' + str(it) + ', E = ' + str(E.item()) + ', ER = ' + str(ER.item()) + ', EM = ' + str(EM.item()) + ', ep = ' + str((self.GDBeta*self.params['epsilon']).item()) + '.')
                 print("iter: " + str(it) + ", E = {:.4f}, ER = {:.4f}, EM = {:.4f}, epd = {:.6f}.".format(E.item(),ER.item(),EM.item(),(self.GDBeta*self.params['epsilon']).item()))
             
             # or (self.EAll[-1]/self.EAll[-2] < 1-self.params['minenergychange'] and self.EAll[-2]/self.EAll[-3] < 1-self.params['minenergychange'] and self.EAll[-3]/self.EAll[-4] < 1-self.params['minenergychange'] and self.EAll[-4]/self.EAll[-5] < 1-self.params['minenergychange'])
-<<<<<<< HEAD
             if it == self.params['niter']-1 or ((self.params['do_lddmm'] == 0 or self.GDBeta < self.params['minbeta']) and (self.params['do_affine']==0 or (self.GDBetaAffineR < self.params['minbeta'] and self.GDBetaAffineT < self.params['minbeta']))) or self.EAll[-1]/self.EAll[self.params['energy_fraction_from']] <= self.params['energy_fraction']:
                 if ((self.params['do_lddmm'] == 0 or self.GDBeta < self.params['minbeta']) and (self.params['do_affine']==0 or (self.GDBetaAffineR < self.params['minbeta'] and self.GDBetaAffineT < self.params['minbeta']))):
                     print('Early termination: Energy change threshold reached.')
@@ -2022,9 +1631,6 @@ class LDDMM:
                     print('Early termination: Minimum fraction of initial energy reached.')
                 
                 print('Total elapsed runtime: {:.2f} seconds.'.format(total_time))
-=======
-            if it == self.params['niter']-1 or (self.GDBeta < self.params['minbeta'] and self.GDBetaAffineR < self.params['minbeta'] and self.GDBetaAffineT < self.params['minbeta']) or self.EAll[-1]/self.EAll[self.params['energy_fraction_from']] <= self.params['energy_fraction']:
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
                 break
             
             # update step sizes
@@ -2039,7 +1645,6 @@ class LDDMM:
                     lambda1,EM = self.calculateMatchingEnergyMSE()
             
             # calculate affine gradient
-<<<<<<< HEAD
             if self.params['do_affine'] == 1:
                 self.calculateGradientA(self.affineA,lambda1)
             elif self.params['do_affine'] == 2:
@@ -2209,25 +1814,10 @@ class LDDMM:
     def outputDeformedTemplate(self):
         return [x[-1].cpu().numpy() for x in self.It]
 
-=======
-            if self.params['doaffine'] == 1:
-                self.calculateGradientA(self.affineA,lambda1)
-            
-            # calculate and update gradients
-            self.calculateAndUpdateGradientsVt(lambda1)
-            # update affine
-            if self.params['doaffine'] == 1:
-                self.updateAffine()
-            
-    
-    
-    
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
     # save files to disk
     def saveOutputs(self, save_template=False):
         if save_template:
             for i in range(len(self.I)):
-<<<<<<< HEAD
                 outimg = nib.AnalyzeImage(self.It[i][-1].to('cpu').numpy(),None)
                 outimg.header['pixdim'][1:4] = self.dx
                 nib.save(outimg,self.params['outdir'] + 'deformed_template_ch' + str(i) + '.img')
@@ -2303,32 +1893,19 @@ class LDDMM:
     
     # convenience function
     def run(self, restart=True, vt0=None, vt1=None, vt2=None, affineA=None, save_template=False):
-=======
-                outimg = nib.AnalyzeImage(self.I[i][-1].to('cpu').numpy(),None)
-                outimg.header['pixdim'][1:4] = self.dx
-                nib.save(outimg,self.params['outdir'] + 'deformed_template_ch' + str(i) + '.img')
-        
-    # convenience function
-    def run(self, restart=True):
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
         # check parameters
         flag = self._checkParameters()
         if flag==-1:
             print('ERROR: parameters did not check out.')
             return
         
-<<<<<<< HEAD
         if self.initializer_flags['load'] == 1:
-=======
-        if restart:
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
             # load images
             flag = self._load(self.params['template'],self.params['target'],self.params['costmask'])
             if flag==-1:
                 print('ERROR: images did not load.')
                 return
             
-<<<<<<< HEAD
         # initialize initialize
         if self.J[0].dim() == 2:
             self.initializeVariables2d()
@@ -2363,24 +1940,5 @@ class LDDMM:
         self.registration()
         # save outputs
         self.saveOutputs(save_template=save_template)
-=======
-            # initialize initialize
-            if self.J[0].dim() == 2:
-                self.initializeVariables2d()
-            else:
-                self.initializeVariables()
-            # initialize stuff for gradient function
-            self._allocateGradientDivisors()
-        
-        # initialize kernels
-        if self.J[0].dim() == 2:
-            self.initializeKernels2d()
-        else:
-            self.initializeKernels()
-        # main loop
-        self.registration()
-        # save outputs
-        self.saveOutputs(save_template=True)
->>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3
         
     

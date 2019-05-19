@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # torch_lddmm - GPU/CPU implementation of modern dense image LDDMM registration algorithms in PyTorch
 
 ## Overview
@@ -95,3 +96,8 @@ lddmm.run()
 2. Ceritoglu, Can & Oishi, Kenichi & Mori, Susumu & Miller, Michael. (2009). Multi-contrast Large Deformation Diffeomorphic Metric Mapping and Diffusion Tensor Image Registration. NeuroImage. 47. S123. 10.1016/S1053-8119(09)71172-3. 
 3. Tward, Daniel & Brown Timothy & Kageyama, Yusuke & Patel, Jaymin & Hou, Zhipeng & Mori, Susumu & Albert, Marilyn & Troncoso, Juan & Miller, Michael. (2018). Diffeomorphic registration with intensity transformation and missing data: Application to 3D digital pathology of Alzheimer’s disease. bioRxiv 494005; doi: https://doi.org/10.1101/494005.
 4. Lee, Brian & Tward, Daniel & Mitra, Partha & Miller, Michael. (2018). On variational solutions for whole brain serial-section histology using the computational anatomy random orbit model. PLOS Computational Biology. 14. 10.1371/journal.pcbi.1006610. 
+=======
+# torch-lddmm
+GPU and CPU implementation of LDDMM image registration, adapted from Daniel Tward's matlab implementation.
+See torch_lddmm_test.py for example usage.
+>>>>>>> 500204cfcd0a1fdf91fd48eae43ddde8a4af7cd3

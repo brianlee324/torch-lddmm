@@ -955,7 +955,7 @@ class LDDMM:
                         self.W[i][ii] = 1.0/np.sqrt(2.0*np.pi*self.params['sigmaW'][ii]**2) * torch.exp(-1.0/2.0/self.params['sigmaW'][ii]**2 * (self.we_C[i][ii] - self.J[i])**2)
         
         for i in range(len(self.I)):
-            Wsum = torch.sum(torch.stack(self.W[i],3),3) + 1.0e-6
+            Wsum = torch.sum(torch.stack(self.W[i],3),3)
             for ii in range(self.params['we']):
                 self.W[i][ii] = self.W[i][ii] / Wsum
         
@@ -966,7 +966,7 @@ class LDDMM:
         for i in range(len(self.I)):
             if i in self.params['we_channels']:
                 for ii in range(self.params['we']):
-                    self.we_C[i][ii] = torch.sum(self.W[i][ii] * self.J[i]) / torch.sum(self.W[i][ii] + 1.0e-6)
+                    self.we_C[i][ii] = torch.sum(self.W[i][ii] * self.J[i]) / torch.sum(self.W[i][ii])
         
         return
     
@@ -1634,15 +1634,16 @@ class LDDMM:
                 break
             
             # update step sizes
-            updateflag = self.updateGDLearningRate()
-            # if asked for, recompute images
-            if updateflag:
-                if self.J[0].dim() == 2:
-                    _,_,_ = self.forwardDeformation2d()
-                    lambda1,EM = self.calculateMatchingEnergyMSE2d()
-                else:
-                    _,_,_,_ = self.forwardDeformation()
-                    lambda1,EM = self.calculateMatchingEnergyMSE()
+            if self.params['we'] == 0 or (self.params['we'] > 0 and np.mod(it,self.params['nMstep']) != 0):
+                updateflag = self.updateGDLearningRate()
+                # if asked for, recompute images
+                if updateflag:
+                    if self.J[0].dim() == 2:
+                        _,_,_ = self.forwardDeformation2d()
+                        lambda1,EM = self.calculateMatchingEnergyMSE2d()
+                    else:
+                        _,_,_,_ = self.forwardDeformation()
+                        lambda1,EM = self.calculateMatchingEnergyMSE()
             
             # calculate affine gradient
             if self.params['do_affine'] == 1:

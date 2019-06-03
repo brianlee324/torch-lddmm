@@ -536,13 +536,19 @@ class LDDMM:
         # helper variables
         self.dt = 1.0/self.params['nt']
         # loss values
-        self.EMAll = []
-        self.ERAll = []
-        self.EAll = []
+        if not hasattr(self,'EMAll'):
+            self.EMAll = []
+        if not hasattr(self,'ERAll'):
+            self.ERAll = []
+        if not hasattr(self,'EAll'):
+            self.EAll = []
         if self.params['checkaffinestep'] == 1:
-            self.EMAffineR = []
-            self.EMAffineT = []
-            self.EMDiffeo = []
+            if not hasattr(self,'EMAffineR'):
+                self.EMAffineR = []
+            if not hasattr(self,'EMAffineT'):
+                self.EMAffineT = []
+            if not hasattr(self,'EMDiffeo'):
+                self.EMDiffeo = []
         
         # image sampling domain
         x0 = np.arange(self.nx[0])*self.dx[0]
@@ -780,6 +786,7 @@ class LDDMM:
                     self.EMAffineR.append( self.calculateMatchingEnergyMSEOnly(I) )
                     # new everything
                     phiinv0_gpu,phiinv1_gpu,phiinv2_gpu = self.forwardDeformationAffineT(self.affineA.clone(),phiinv0_gpu,phiinv1_gpu,phiinv2_gpu)
+                    del phiinv0_temp,phiinv1_temp,phiinv2_temp
                 else:
                     phiinv0_gpu,phiinv1_gpu,phiinv2_gpu = self.forwardDeformationAffineVectorized(self.affineA.clone(),phiinv0_gpu,phiinv1_gpu,phiinv2_gpu)
             
@@ -787,7 +794,8 @@ class LDDMM:
             for i in range(len(self.I)):
                 self.It[i][t+1] = torch.squeeze(torch.nn.functional.grid_sample(self.It[i][0].unsqueeze(0).unsqueeze(0),torch.stack((phiinv2_gpu/(self.nx[2]*self.dx[2]-self.dx[2])*2,phiinv1_gpu/(self.nx[1]*self.dx[1]-self.dx[1])*2,phiinv0_gpu/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='zeros'))
         
-        return self.It,phiinv0_gpu, phiinv1_gpu, phiinv2_gpu
+        del phiinv0_gpu, phiinv1_gpu, phiinv2_gpu
+        #return self.It,phiinv0_gpu, phiinv1_gpu, phiinv2_gpu
     
     # compute current displacement field
     def computeThisDisplacement(self,interpmode='bilinear'):
@@ -903,6 +911,7 @@ class LDDMM:
         phiinv0_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv0_gpu-self.X0).unsqueeze(0).unsqueeze(0),torch.stack(((torch.reshape(s[2,:],(self.X2.shape)))/(self.nx[2]*self.dx[2]-self.dx[2])*2,(torch.reshape(s[1,:],(self.X1.shape)))/(self.nx[1]*self.dx[1]-self.dx[1])*2,(torch.reshape(s[0,:],(self.X0.shape)))/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='border',mode=interpmode)) + (torch.reshape(s[0,:],(self.X0.shape)))
         phiinv1_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv1_gpu-self.X1).unsqueeze(0).unsqueeze(0),torch.stack(((torch.reshape(s[2,:],(self.X2.shape)))/(self.nx[2]*self.dx[2]-self.dx[2])*2,(torch.reshape(s[1,:],(self.X1.shape)))/(self.nx[1]*self.dx[1]-self.dx[1])*2,(torch.reshape(s[0,:],(self.X0.shape)))/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='border',mode=interpmode)) + (torch.reshape(s[1,:],(self.X1.shape)))
         phiinv2_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv2_gpu-self.X2).unsqueeze(0).unsqueeze(0),torch.stack(((torch.reshape(s[2,:],(self.X2.shape)))/(self.nx[2]*self.dx[2]-self.dx[2])*2,(torch.reshape(s[1,:],(self.X1.shape)))/(self.nx[1]*self.dx[1]-self.dx[1])*2,(torch.reshape(s[0,:],(self.X0.shape)))/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='border',mode=interpmode)) + (torch.reshape(s[2,:],(self.X2.shape)))
+        del s
         return phiinv0_gpu, phiinv1_gpu, phiinv2_gpu
     
     # deform template forward using affine without translation
@@ -915,6 +924,7 @@ class LDDMM:
         phiinv0_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv0_gpu-self.X0).unsqueeze(0).unsqueeze(0),torch.stack(((torch.reshape(s[2,:],(self.X2.shape)))/(self.nx[2]*self.dx[2]-self.dx[2])*2,(torch.reshape(s[1,:],(self.X1.shape)))/(self.nx[1]*self.dx[1]-self.dx[1])*2,(torch.reshape(s[0,:],(self.X0.shape)))/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='border')) + (torch.reshape(s[0,:],(self.X0.shape)))
         phiinv1_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv1_gpu-self.X1).unsqueeze(0).unsqueeze(0),torch.stack(((torch.reshape(s[2,:],(self.X2.shape)))/(self.nx[2]*self.dx[2]-self.dx[2])*2,(torch.reshape(s[1,:],(self.X1.shape)))/(self.nx[1]*self.dx[1]-self.dx[1])*2,(torch.reshape(s[0,:],(self.X0.shape)))/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='border')) + (torch.reshape(s[1,:],(self.X1.shape)))
         phiinv2_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv2_gpu-self.X2).unsqueeze(0).unsqueeze(0),torch.stack(((torch.reshape(s[2,:],(self.X2.shape)))/(self.nx[2]*self.dx[2]-self.dx[2])*2,(torch.reshape(s[1,:],(self.X1.shape)))/(self.nx[1]*self.dx[1]-self.dx[1])*2,(torch.reshape(s[0,:],(self.X0.shape)))/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='border')) + (torch.reshape(s[2,:],(self.X2.shape)))
+        del s
         return phiinv0_gpu, phiinv1_gpu, phiinv2_gpu
     
     # deform template forward using affine translation
@@ -924,6 +934,7 @@ class LDDMM:
         phiinv0_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv0_gpu-self.X0).unsqueeze(0).unsqueeze(0),torch.stack(((torch.reshape(s[2,:],(self.X2.shape)))/(self.nx[2]*self.dx[2]-self.dx[2])*2,(torch.reshape(s[1,:],(self.X1.shape)))/(self.nx[1]*self.dx[1]-self.dx[1])*2,(torch.reshape(s[0,:],(self.X0.shape)))/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='border')) + (torch.reshape(s[0,:],(self.X0.shape)))
         phiinv1_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv1_gpu-self.X1).unsqueeze(0).unsqueeze(0),torch.stack(((torch.reshape(s[2,:],(self.X2.shape)))/(self.nx[2]*self.dx[2]-self.dx[2])*2,(torch.reshape(s[1,:],(self.X1.shape)))/(self.nx[1]*self.dx[1]-self.dx[1])*2,(torch.reshape(s[0,:],(self.X0.shape)))/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='border')) + (torch.reshape(s[1,:],(self.X1.shape)))
         phiinv2_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv2_gpu-self.X2).unsqueeze(0).unsqueeze(0),torch.stack(((torch.reshape(s[2,:],(self.X2.shape)))/(self.nx[2]*self.dx[2]-self.dx[2])*2,(torch.reshape(s[1,:],(self.X1.shape)))/(self.nx[1]*self.dx[1]-self.dx[1])*2,(torch.reshape(s[0,:],(self.X0.shape)))/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='border')) + (torch.reshape(s[2,:],(self.X2.shape)))
+        del s
         return phiinv0_gpu, phiinv1_gpu, phiinv2_gpu
     
     # compute contrast correction values
@@ -959,6 +970,7 @@ class LDDMM:
             for ii in range(self.params['we']):
                 self.W[i][ii] = self.W[i][ii] / Wsum
         
+        del Wsum
         return
     
     # update weight estimation constants
@@ -1149,6 +1161,7 @@ class LDDMM:
             - phiinv0_1*(phiinv1_0*phiinv2_2 - phiinv1_2*phiinv2_0)\
             + phiinv0_2*(phiinv1_0*phiinv2_1 - phiinv1_1*phiinv2_0)
         
+        del phiinv0_0,phiinv0_1,phiinv0_2,phiinv1_0,phiinv1_1,phiinv1_2,phiinv2_0,phiinv2_1,phiinv2_2
         # deform phiinv back by affine transform if asked for
         # is this accumulating?
         #if self.params['do_affine'] == 1:
@@ -1173,6 +1186,8 @@ class LDDMM:
                 grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient(((self.It[i][t] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]),self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)])]
         
         # smooth it
+        del lambdat, detjac
+        torch.cuda.empty_cache()
         grad_list = [torch.irfft(torch.rfft(x,3,onesided=False)*self.Khat,3,onesided=False) for x in grad_list]
         
         # add the regularization term
@@ -1239,6 +1254,9 @@ class LDDMM:
             else:
                 grad_list,phiinv0_gpu,phiinv1_gpu = self.calculateGradientVt2d(lambda1,t,phiinv0_gpu,phiinv1_gpu)
             self.updateGradientVt(t,grad_list)
+            del grad_list
+        
+        del phiinv0_gpu,phiinv1_gpu,phiinv2_gpu
     
     # update affine matrix
     def updateAffine(self):
@@ -1580,7 +1598,7 @@ class LDDMM:
                 ER = self.calculateRegularizationEnergyVt2d()
                 lambda1,EM = self.calculateMatchingEnergyMSE2d()
             else:
-                _,_,_,_ = self.forwardDeformation()
+                self.forwardDeformation()
                 if self.params['cc'] == 1:
                     self.runContrastCorrection()
                 
@@ -1642,7 +1660,7 @@ class LDDMM:
                         _,_,_ = self.forwardDeformation2d()
                         lambda1,EM = self.calculateMatchingEnergyMSE2d()
                     else:
-                        _,_,_,_ = self.forwardDeformation()
+                        self.forwardDeformation()
                         lambda1,EM = self.calculateMatchingEnergyMSE()
             
             # calculate affine gradient
@@ -1651,9 +1669,13 @@ class LDDMM:
             elif self.params['do_affine'] == 2:
                 self.calculateGradientA(self.affineA,lambda1,mode='rigid')
             
+            torch.cuda.empty_cache()
+            
             # calculate and update gradients
             if self.params['do_lddmm'] == 1:
                 self.calculateAndUpdateGradientsVt(lambda1)
+            
+            del lambda1
             
             # update affine
             if self.params['do_affine'] > 0:

@@ -15,7 +15,7 @@ def mygaussian(sigma=1,size=5):
     return out_mat
 
 class LDDMM:
-    def __init__(self,template=None,target=None,costmask=None,outdir='./',gpu_number=0,a=5.0,p=2,niter=100,epsilon=5e-3,epsilonL=1.0e-7,epsilonT=2.0e-5,sigma=2.0,sigmaR=1.0,nt=5,do_lddmm=1,do_affine=0,checkaffinestep=0,optimizer='gd',maxclimbcount=3,savebestv=False,minenergychange = 0.000001,minbeta=1e-4,dtype='float',im_norm_ms=0,slice_alignment=0,energy_fraction=0.02,energy_fraction_from=0,cc=0,cc_channels=[],we=0,we_channels=[],sigmaW=1.0,nMstep=5,dx=None):
+    def __init__(self,template=None,target=None,costmask=None,outdir='./',gpu_number=0,a=5.0,p=2,niter=100,epsilon=5e-3,epsilonL=1.0e-7,epsilonT=2.0e-5,sigma=2.0,sigmaR=1.0,nt=5,do_lddmm=1,do_affine=0,checkaffinestep=0,optimizer='gd',maxclimbcount=3,savebestv=False,minenergychange = 0.000001,minbeta=1e-4,dtype='float',im_norm_ms=0,slice_alignment=0,energy_fraction=0.02,energy_fraction_from=0,cc=0,cc_channels=[],we=0,we_channels=[],sigmaW=1.0,nMstep=5,dx=None,low_memory=0):
         self.params = {}
         self.params['gpu_number'] = gpu_number
         self.params['a'] = float(a)
@@ -58,6 +58,7 @@ class LDDMM:
         dtype_dict['float'] = 'torch.FloatTensor'
         dtype_dict['double'] = 'torch.DoubleTensor'
         self.params['dtype'] = dtype_dict[dtype]
+        self.params['low_memory'] = low_memory
         optimizer_dict = {}
         optimizer_dict['gd'] = 'gradient descent'
         optimizer_dict['gdr'] = 'gradient descent with reducing epsilon'
@@ -86,6 +87,7 @@ class LDDMM:
         print('>    we_channels     = ' + str(we_channels) + ' (image channels to run weight estimation (0-indexed))')
         print('>    sigmaW          = ' + str(sigmaW) + ' (coefficient for each weight estimation class)')
         print('>    nMstep          = ' + str(nMstep) + ' (update weight estimation every nMstep steps)')
+        print('>    low_memory      = ' + str(low_memory) + ' (low memory mode: 0 = no, 1 = yes)')
         print('>    outdir          = ' + str(outdir) + ' (output directory name)')
         if optimizer in optimizer_dict:
             print('>    optimizer       = ' + str(optimizer_dict[optimizer]) + ' (optimizer type)')
@@ -223,7 +225,7 @@ class LDDMM:
             else:
                 self.params['cuda'] = 'cuda:' + str(self.params['gpu_number'])
         
-        number_list = ['a','p','niter','epsilon','sigmaR','nt','do_lddmm','do_affine','epsilonL','epsilonT','im_norm_ms','slice_alignment','energy_fraction','energy_fraction_from','cc','we','nMstep']
+        number_list = ['a','p','niter','epsilon','sigmaR','nt','do_lddmm','do_affine','epsilonL','epsilonT','im_norm_ms','slice_alignment','energy_fraction','energy_fraction_from','cc','we','nMstep','low_memory']
         string_list = ['outdir','optimizer']
         stringornone_list = ['costmask'] # or array, actually
         stringorlist_list = ['template','target'] # or array, actually
@@ -572,7 +574,7 @@ class LDDMM:
                     self.vt1.append(torch.tensor(np.zeros((self.nx[0],self.nx[1],self.nx[2]))).type(self.params['dtype']).to(device=self.params['cuda']))
                     self.vt2.append(torch.tensor(np.zeros((self.nx[0],self.nx[1],self.nx[2]))).type(self.params['dtype']).to(device=self.params['cuda']))
             
-            if self.initializer_flags['load'] == 1 or self.initializer_flags['lddmm'] == 1:
+            if (self.initializer_flags['load'] == 1 or self.initializer_flags['lddmm'] == 1) and self.params['low_memory'] < 1:
                 self.It = [ [None]*(self.params['nt']+1) for i in range(len(self.I)) ]
                 for ii in range(len(self.I)):
                     # NOTE: you cannot use pointers / list multiplication for cuda tensors if you want actual copies
@@ -843,6 +845,30 @@ class LDDMM:
         
         return It,phiinv0_gpu, phiinv1_gpu, phiinv2_gpu
     
+    # apply current transform to new image
+    def applyThisTransformNT(self, I, interpmode='bilinear',dtype='torch.FloatTensor',nt=None):
+        if nt == None:
+            nt = self.params['nt']
+        
+        phiinv0_gpu = self.X0.clone()
+        phiinv1_gpu = self.X1.clone()
+        phiinv2_gpu = self.X2.clone()
+        # TODO: evaluate memory vs speed for precomputing Xs, Ys, Zs
+        for t in range(nt):
+            # update phiinv using method of characteristics
+            if self.params['do_lddmm'] == 1 or hasattr(self,'vt0'):
+                phiinv0_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv0_gpu-self.X0).unsqueeze(0).unsqueeze(0),torch.stack(((self.X2-self.vt2[t]*self.dt)/(self.nx[2]*self.dx[2]-self.dx[2])*2,(self.X1-self.vt1[t]*self.dt)/(self.nx[1]*self.dx[1]-self.dx[1])*2,(self.X0-self.vt0[t]*self.dt)/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='border')) + (self.X0-self.vt0[t]*self.dt)
+                phiinv1_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv1_gpu-self.X1).unsqueeze(0).unsqueeze(0),torch.stack(((self.X2-self.vt2[t]*self.dt)/(self.nx[2]*self.dx[2]-self.dx[2])*2,(self.X1-self.vt1[t]*self.dt)/(self.nx[1]*self.dx[1]-self.dx[1])*2,(self.X0-self.vt0[t]*self.dt)/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='border')) + (self.X1-self.vt1[t]*self.dt)
+                phiinv2_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv2_gpu-self.X2).unsqueeze(0).unsqueeze(0),torch.stack(((self.X2-self.vt2[t]*self.dt)/(self.nx[2]*self.dx[2]-self.dx[2])*2,(self.X1-self.vt1[t]*self.dt)/(self.nx[1]*self.dx[1]-self.dx[1])*2,(self.X0-self.vt0[t]*self.dt)/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='border')) + (self.X2-self.vt2[t]*self.dt)
+            
+            if t == self.params['nt']-1 and (self.params['do_affine'] > 0  or (hasattr(self, 'affineA') and not torch.all(torch.eq(self.affineA,torch.tensor(np.eye(4)).type(self.params['dtype']).to(device=self.params['cuda']))) ) ): # run this if do_affine == 1 or affineA exists and isn't identity
+                phiinv0_gpu,phiinv1_gpu,phiinv2_gpu = self.forwardDeformationAffineVectorized(self.affineA,phiinv0_gpu,phiinv1_gpu,phiinv2_gpu)
+        
+        # deform the image
+        It = torch.squeeze(torch.nn.functional.grid_sample(I.unsqueeze(0).unsqueeze(0),torch.stack((phiinv2_gpu.type(dtype).to(device=self.params['cuda'])/(self.nx[2]*self.dx[2]-self.dx[2])*2,phiinv1_gpu.type(dtype).to(device=self.params['cuda'])/(self.nx[1]*self.dx[1]-self.dx[1])*2,phiinv0_gpu.type(dtype).to(device=self.params['cuda'])/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='zeros',mode=interpmode))
+        del phiinv0_gpu,phiinv1_gpu,phiinv2_gpu
+        return It
+    
     # deform template forward
     def forwardDeformation2d(self):
         phiinv0_gpu = self.X0.clone()
@@ -949,9 +975,15 @@ class LDDMM:
     def runContrastCorrection(self):
         for i in self.params['cc_channels']:
             if i in self.params['we_channels'] and self.params['we'] != 0:
-                self.ccIbar[i],self.ccJbar[i],self.ccVarI[i],self.ccCovIJ[i] = self.computeLinearContrastTransform(self.It[i][-1], self.J[i],self.W[i][0])
+                if self.params['low_memory'] == 0:
+                    self.ccIbar[i],self.ccJbar[i],self.ccVarI[i],self.ccCovIJ[i] = self.computeLinearContrastTransform(self.It[i][-1], self.J[i],self.W[i][0])
+                else:
+                    self.ccIbar[i],self.ccJbar[i],self.ccVarI[i],self.ccCovIJ[i] = self.computeLinearContrastTransform(self.applyThisTransformNT(self.I[i],nt=self.params['nt']), self.J[i],self.W[i][0])
             else:
-                self.ccIbar[i],self.ccJbar[i],self.ccVarI[i],self.ccCovIJ[i] = self.computeLinearContrastTransform(self.It[i][-1], self.J[i])
+                if self.params['low_memory'] == 0:
+                    self.ccIbar[i],self.ccJbar[i],self.ccVarI[i],self.ccCovIJ[i] = self.computeLinearContrastTransform(self.It[i][-1], self.J[i])
+                else:
+                    self.ccIbar[i],self.ccJbar[i],self.ccVarI[i],self.ccCovIJ[i] = self.computeLinearContrastTransform(self.applyThisTransformNT(self.I[i],nt=self.params['nt']), self.J[i])
         
         return
     
@@ -961,7 +993,10 @@ class LDDMM:
             for i in range(len(self.I)):
                 if i in self.params['we_channels']:
                     if ii == 0:
-                        self.W[i][ii] = 1.0/np.sqrt(2.0*np.pi*self.params['sigma'][i]**2) * torch.exp(-1.0/2.0/self.params['sigma'][i]**2 * (((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2)
+                        if self.params['low_memory'] == 0:
+                            self.W[i][ii] = 1.0/np.sqrt(2.0*np.pi*self.params['sigma'][i]**2) * torch.exp(-1.0/2.0/self.params['sigma'][i]**2 * (((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2)
+                        else:
+                            self.W[i][ii] = 1.0/np.sqrt(2.0*np.pi*self.params['sigma'][i]**2) * torch.exp(-1.0/2.0/self.params['sigma'][i]**2 * (((self.applyThisTransformNT(self.I[i],nt=self.params['nt']) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2)
                     else:
                         self.W[i][ii] = 1.0/np.sqrt(2.0*np.pi*self.params['sigmaW'][ii]**2) * torch.exp(-1.0/2.0/self.params['sigmaW'][ii]**2 * (self.we_C[i][ii] - self.J[i])**2)
         
@@ -1006,21 +1041,32 @@ class LDDMM:
         EM = 0
         if self.params['we'] == 0:
             for i in range(len(self.I)):
-                lambda1[i] = -1*self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])/self.params['sigma'][i]**2 # may not need to store this
-                EM += torch.sum(self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
+                if self.params['low_memory'] == 0:
+                    lambda1[i] = -1*self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])/self.params['sigma'][i]**2 # may not need to store this
+                    EM += torch.sum(self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
+                else:
+                    lambda1[i] = -1*self.M*( ((self.applyThisTransformNT(self.I[i]) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])/self.params['sigma'][i]**2 # may not need to store this
+                    EM += torch.sum(self.M*( ((self.applyThisTransformNT(self.I[i]) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
         else:
             for i in range(len(self.I)):
                 if i in self.params['we_channels']:
                     for ii in range(self.params['we']):
                         if ii == 0:
-                            lambda1[i] = -1*self.W[i][ii]*self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])/self.params['sigma'][i]**2
-                            EM += torch.sum(self.W[i][ii]*self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
+                            if self.params['low_memory'] == 0:
+                                lambda1[i] = -1*self.W[i][ii]*self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])/self.params['sigma'][i]**2
+                                EM += torch.sum(self.W[i][ii]*self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
+                            else:
+                                lambda1[i] = -1*self.W[i][ii]*self.M*( ((self.applyThisTransformNT(self.I[i]) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])/self.params['sigma'][i]**2
+                                EM += torch.sum(self.W[i][ii]*self.M*( ((self.applyThisTransformNT(self.I[i]) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
                         else:
                             EM += torch.sum(self.W[i][ii]*self.M*( self.we_C[i][ii] - self.J[i])**2/(2.0*self.params['sigmaW'][ii]**2))*self.dx[0]*self.dx[1]*self.dx[2]
                 else:
-                    lambda1[i] = -1*self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])/self.params['sigma'][i]**2 # may not need to store this
-                    EM += torch.sum(self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
-        
+                    if self.params['low_memory'] == 0:
+                        lambda1[i] = -1*self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])/self.params['sigma'][i]**2 # may not need to store this
+                        EM += torch.sum(self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
+                    else:
+                        lambda1[i] = -1*self.M*( ((self.applyThisTransformNT(self.I[i]) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])/self.params['sigma'][i]**2 # may not need to store this
+                        EM += torch.sum(self.M*( ((self.applyThisTransformNT(self.I[i]) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
         return lambda1, EM
     
     # compute matching energy
@@ -1125,7 +1171,10 @@ class LDDMM:
         gi_y = [None]*len(self.I)
         gi_z = [None]*len(self.I)
         for i in range(len(self.I)):
-            gi_x[i],gi_y[i],gi_z[i] = self.torch_gradient(((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]),self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)
+            if self.params['low_memory'] == 0:
+                gi_x[i],gi_y[i],gi_z[i] = self.torch_gradient(((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]),self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)
+            else:
+                gi_x[i],gi_y[i],gi_z[i] = self.torch_gradient(((self.applyThisTransformNT(self.I[i]) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]),self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)
             # TODO: can this be efficiently vectorized?
             for r in range(3):
                 for c in range(4):
@@ -1181,13 +1230,21 @@ class LDDMM:
             # get the gradient of the image at this time
             # is there a row column flip in matlab versus my torch_gradient function? yes, there is.
             if i == 0:
-                grad_list = [x*lambdat for x in self.torch_gradient(((self.It[i][t] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]),self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)]
+                if self.params['low_memory'] == 0:
+                    grad_list = [x*lambdat for x in self.torch_gradient(((self.It[i][t] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]),self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)]
+                else:
+                    grad_list = [x*lambdat for x in self.torch_gradient(((self.applyThisTransformNT(self.I[i],nt=t) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]),self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)]
             else:
-                grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient(((self.It[i][t] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]),self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)])]
+                if self.params['low_memory'] == 0:
+                    grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient(((self.It[i][t] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]),self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)])]
+                else:
+                    grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient(((self.applyThisTransformNT(self.I[i],nt=t) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]),self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)])]
         
         # smooth it
         del lambdat, detjac
-        torch.cuda.empty_cache()
+        if self.params['low_memory'] > 0:
+            torch.cuda.empty_cache()
+            
         grad_list = [torch.irfft(torch.rfft(x,3,onesided=False)*self.Khat,3,onesided=False) for x in grad_list]
         
         # add the regularization term
@@ -1598,7 +1655,9 @@ class LDDMM:
                 ER = self.calculateRegularizationEnergyVt2d()
                 lambda1,EM = self.calculateMatchingEnergyMSE2d()
             else:
-                self.forwardDeformation()
+                if self.params['low_memory'] < 1:
+                    self.forwardDeformation()
+                
                 if self.params['cc'] == 1:
                     self.runContrastCorrection()
                 
@@ -1651,6 +1710,8 @@ class LDDMM:
                 print('Total elapsed runtime: {:.2f} seconds.'.format(total_time))
                 break
             
+            del E, ER, EM
+            
             # update step sizes
             if self.params['we'] == 0 or (self.params['we'] > 0 and np.mod(it,self.params['nMstep']) != 0):
                 updateflag = self.updateGDLearningRate()
@@ -1660,7 +1721,9 @@ class LDDMM:
                         _,_,_ = self.forwardDeformation2d()
                         lambda1,EM = self.calculateMatchingEnergyMSE2d()
                     else:
-                        self.forwardDeformation()
+                        if self.params['low_memory'] < 1:
+                            self.forwardDeformation()
+                        
                         lambda1,EM = self.calculateMatchingEnergyMSE()
             
             # calculate affine gradient
@@ -1669,7 +1732,8 @@ class LDDMM:
             elif self.params['do_affine'] == 2:
                 self.calculateGradientA(self.affineA,lambda1,mode='rigid')
             
-            torch.cuda.empty_cache()
+            if self.params['low_memory'] > 0:
+                torch.cuda.empty_cache()
             
             # calculate and update gradients
             if self.params['do_lddmm'] == 1:
@@ -1835,7 +1899,10 @@ class LDDMM:
     
     # output deformed template
     def outputDeformedTemplate(self):
-        return [x[-1].cpu().numpy() for x in self.It]
+        if self.params['low_memory'] == 0:
+            return [x[-1].cpu().numpy() for x in self.It]
+        else:
+            return [(self.applyThisTransformNT(x)).cpu().numpy() for x in self.I]
 
     # save files to disk
     def saveOutputs(self, save_template=False):

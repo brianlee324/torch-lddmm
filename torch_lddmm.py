@@ -14,6 +14,19 @@ def mygaussian(sigma=1,size=5):
     out_mat = out_mat / np.sum(out_mat)
     return out_mat
 
+def mygaussian_torch_selectcenter(sigma=1,center_x=0,center_y=0,size_x=100,size_y=100):
+    ind_x = torch.linspace(0,size_x-1,size_x)
+    ind_y = torch.linspace(0,size_y-1,size_y)
+    X,Y = torch.meshgrid(ind_x,ind_y)
+    out_mat = torch.exp(-((X-center_x)**2 + (Y-center_y)**2) / (2*sigma**2))
+    #out_mat = out_mat / torch.sum(out_mat)
+    return out_mat
+
+def mygaussian_torch_selectcenter_meshgrid(X,Y,sigma=1,center_x=0,center_y=0):
+    out_mat = torch.exp(-((X-center_x)**2 + (Y-center_y)**2) / (2*sigma**2))
+    #out_mat = out_mat / torch.sum(out_mat)
+    return out_mat
+
 def mygaussian3d(sigma=1,size=5):
     ind = np.linspace(-np.floor(size/2.0),np.floor(size/2.0),size)
     X,Y,Z = np.meshgrid(ind,ind,ind,indexing='xy')
@@ -21,8 +34,13 @@ def mygaussian3d(sigma=1,size=5):
     out_mat = out_mat / np.sum(out_mat)
     return out_mat
 
+def mygaussian_3d_torch_selectcenter_meshgrid(X,Y,Z,sigma=1,center_x=0,center_y=0,center_z=0):
+    out_mat = torch.exp(-((X-center_x)**2 + (Y-center_y)**2 + (Z-center_z)**2) / (2*sigma**2))
+    #out_mat = out_mat / torch.sum(out_mat)
+    return out_mat
+
 class LDDMM:
-    def __init__(self,template=None,target=None,costmask=None,outdir='./',gpu_number=0,a=5.0,p=2,niter=100,epsilon=5e-3,epsilonL=1.0e-7,epsilonT=2.0e-5,sigma=2.0,sigmaR=1.0,nt=5,do_lddmm=1,do_affine=0,checkaffinestep=0,optimizer='gd',maxclimbcount=3,savebestv=False,minenergychange = 0.000001,minbeta=1e-4,dtype='float',im_norm_ms=0,slice_alignment=0,energy_fraction=0.02,energy_fraction_from=0,cc=0,cc_channels=[],we=0,we_channels=[],sigmaW=1.0,nMstep=5,dx=None,low_memory=0,v_scale=1.0):
+    def __init__(self,template=None,target=None,costmask=None,outdir='./',gpu_number=0,a=5.0,p=2,niter=100,epsilon=5e-3,epsilonL=1.0e-7,epsilonT=2.0e-5,sigma=2.0,sigmaR=1.0,nt=5,do_lddmm=1,do_affine=0,checkaffinestep=0,optimizer='gd',sg_mask_mode='ones',sg_rand_scale=1.0,sg_sigma=1.0,sg_climbcount=1,sg_holdcount=1,sg_gamma=0.9,adam_alpha=0.1,adam_beta1=0.9,adam_beta2=0.999,adam_epsilon=1e-8,ada_rho=0.95,ada_epsilon=1e-6,rms_rho=0.9,rms_epsilon=1e-8,rms_alpha=0.001,maxclimbcount=3,savebestv=False,minenergychange = 0.000001,minbeta=1e-4,dtype='float',im_norm_ms=0,slice_alignment=0,energy_fraction=0.02,energy_fraction_from=0,cc=0,cc_channels=[],we=0,we_channels=[],sigmaW=1.0,nMstep=5,dx=None,low_memory=0,update_epsilon=0,v_scale=1.0,v_scale_smoothing=0):
         self.params = {}
         self.params['gpu_number'] = gpu_number
         self.params['a'] = float(a)
@@ -46,6 +64,21 @@ class LDDMM:
         self.params['do_affine'] = do_affine
         self.params['checkaffinestep'] = checkaffinestep
         self.params['optimizer'] = optimizer
+        self.params['sg_sigma'] = float(sg_sigma)
+        self.params['sg_mask_mode'] = sg_mask_mode
+        self.params['sg_rand_scale'] = float(sg_rand_scale)
+        self.params['sg_climbcount'] = int(sg_climbcount)
+        self.params['sg_holdcount'] = int(sg_holdcount)
+        self.params['sg_gamma'] = float(sg_gamma)
+        self.params['adam_alpha'] = float(adam_alpha)
+        self.params['adam_beta1'] = float(adam_beta1)
+        self.params['adam_beta2'] = float(adam_beta2)
+        self.params['adam_epsilon'] = float(adam_epsilon)
+        self.params['ada_rho'] = float(ada_rho)
+        self.params['ada_epsilon'] = float(ada_epsilon)
+        self.params['rms_rho'] = float(rms_rho)
+        self.params['rms_epsilon'] = float(rms_epsilon)
+        self.params['rms_alpha'] = float(rms_alpha)
         self.params['maxclimbcount'] = maxclimbcount
         self.params['savebestv'] = savebestv
         self.params['minbeta'] = minbeta
@@ -61,16 +94,23 @@ class LDDMM:
         self.params['sigmaW'] = sigmaW
         self.params['nMstep'] = nMstep
         self.params['v_scale'] = float(v_scale)
+        self.params['v_scale_smoothing'] = int(v_scale_smoothing)
         self.params['dx'] = dx
         dtype_dict = {}
         dtype_dict['float'] = 'torch.FloatTensor'
         dtype_dict['double'] = 'torch.DoubleTensor'
         self.params['dtype'] = dtype_dict[dtype]
         self.params['low_memory'] = low_memory
+        self.params['update_epsilon'] = float(update_epsilon)
         optimizer_dict = {}
         optimizer_dict['gd'] = 'gradient descent'
         optimizer_dict['gdr'] = 'gradient descent with reducing epsilon'
         optimizer_dict['gdw'] = 'gradient descent with delayed reducing epsilon'
+        optimizer_dict['adam'] = 'adaptive moment estimation (UNDER CONSTRUCTION)'
+        optimizer_dict['adadelta'] = 'adadelta (UNDER CONSTRUCTION)'
+        optimizer_dict['rmsprop'] = 'root mean square propagation (UNDER CONSTRUCTION)'
+        optimizer_dict['sgd'] = 'stochastic gradient descent'
+        optimizer_dict['sgdm'] = 'stochastic gradient descent with momentum (UNDER CONSTRUCTION)'
         print('\nCurrent parameters:')
         print('>    a               = ' + str(a) + ' (smoothing kernel, a*(pixel_size))')
         print('>    p               = ' + str(p) + ' (smoothing kernel power, p*2)')
@@ -95,11 +135,45 @@ class LDDMM:
         print('>    we_channels     = ' + str(we_channels) + ' (image channels to run weight estimation (0-indexed))')
         print('>    sigmaW          = ' + str(sigmaW) + ' (coefficient for each weight estimation class)')
         print('>    nMstep          = ' + str(nMstep) + ' (update weight estimation every nMstep steps)')
-        print('>    v_scal          = ' + str(v_scale) + ' (parameter scaling factor)')
+        print('>    v_scale         = ' + str(v_scale) + ' (parameter scaling factor)')
+        if v_scale < 1.0:
+            print('>    v_scale_smooth  = ' + str(v_scale_smoothing) + ' (smoothing before interpolation for v-scaling: 0 = no, 1 = yes)')
         print('>    low_memory      = ' + str(low_memory) + ' (low memory mode: 0 = no, 1 = yes)')
+        print('>    update_epsilon  = ' + str(update_epsilon) + ' (update optimization step size between runs: 0 = no, 1 = yes)')
         print('>    outdir          = ' + str(outdir) + ' (output directory name)')
         if optimizer in optimizer_dict:
             print('>    optimizer       = ' + str(optimizer_dict[optimizer]) + ' (optimizer type)')
+            if optimizer == 'adam':
+                print('>    +adam_alpha     = ' + str(adam_alpha) + ' (learning rate)')
+                print('>    +adam_beta1     = ' + str(adam_beta1) + ' (decay rate 1)')
+                print('>    +adam_beta2     = ' + str(adam_beta2) + ' (decay rate 2)')
+                print('>    +adam_epsilon   = ' + str(adam_epsilon) + ' (epsilon)')
+                print('>    +sg_sigma       = ' + str(sg_sigma) + ' (subsampler sigma (for gaussian mode))')
+                print('>    +sg_mask_mode   = ' + str(sg_mask_mode) + ' (subsampler scheme)')
+                print('>    +sg_climbcount  = ' + str(sg_climbcount) + ' (# of times energy is allowed to increase)')
+                print('>    +sg_holdcount   = ' + str(sg_holdcount) + ' (# of iterations per random mask)')
+                print('>    +sg_rand_scale  = ' + str(sg_rand_scale) + ' (scale for non-gauss sg masking)')
+            elif optimizer == "adadelta":
+                print('>    +ada_rho        = ' + str(ada_rho) + ' (decay rate)')
+                print('>    +ada_epsilon    = ' + str(ada_epsilon) + ' (epsilon)')
+            elif optimizer == "rmsprop":
+                print('>    +rms_rho        = ' + str(rms_rho) + ' (decay rate)')
+                print('>    +rms_epsilon    = ' + str(rms_epsilon) + ' (epsilon)')
+                print('>    +rms_alpha      = ' + str(rms_alpha) + ' (learning rate)')
+                print('>    +sg_sigma       = ' + str(sg_sigma) + ' (subsampler sigma (for gaussian mode))')
+                print('>    +sg_mask_mode   = ' + str(sg_mask_mode) + ' (subsampler scheme)')
+                print('>    +sg_climbcount  = ' + str(sg_climbcount) + ' (# of times energy is allowed to increase)')
+                print('>    +sg_holdcount   = ' + str(sg_holdcount) + ' (# of iterations per random mask)')
+                print('>    +sg_rand_scale  = ' + str(sg_rand_scale) + ' (scale for non-gauss sg masking)')
+            elif optimizer == 'sgd' or optimizer == 'sgdm':
+                print('>    +sg_sigma       = ' + str(sg_sigma) + ' (subsampler sigma (for gaussian mode))')
+                print('>    +sg_mask_mode   = ' + str(sg_mask_mode) + ' (subsampler scheme)')
+                print('>    +sg_climbcount  = ' + str(sg_climbcount) + ' (# of times energy is allowed to increase)')
+                print('>    +sg_holdcount   = ' + str(sg_holdcount) + ' (# of iterations per random mask)')
+                print('>    +sg_rand_scale  = ' + str(sg_rand_scale) + ' (scale for non-gauss sg masking)')
+                if optimizer == 'sgdm':
+                    print('>    +sg_gamma       = ' + str(sg_gamma) + ' (fraction of paste updates)')
+        
         else:
             print('WARNING: optimizer \'' + str(optimizer) + '\' not recognized. Setting to basic gradient descent with reducing step size.')
             self.params['optimizer'] = 'gdr'
@@ -234,7 +308,7 @@ class LDDMM:
             else:
                 self.params['cuda'] = 'cuda:' + str(self.params['gpu_number'])
         
-        number_list = ['a','p','niter','epsilon','sigmaR','nt','do_lddmm','do_affine','epsilonL','epsilonT','im_norm_ms','slice_alignment','energy_fraction','energy_fraction_from','cc','we','nMstep','low_memory','v_scale']
+        number_list = ['a','p','niter','epsilon','sigmaR','nt','do_lddmm','do_affine','epsilonL','epsilonT','im_norm_ms','slice_alignment','energy_fraction','energy_fraction_from','cc','we','nMstep','low_memory','update_epsilon','v_scale','adam_alpha','adam_beta1','adam_beta2','adam_epsilon','ada_rho','ada_epsilon','rms_rho','rms_alpha','rms_epsilon','sg_sigma','sg_climbcount','sg_rand_scale','sg_holdcount','sg_gamma','v_scale_smoothing']
         string_list = ['outdir','optimizer']
         stringornone_list = ['costmask'] # or array, actually
         stringorlist_list = ['template','target'] # or array, actually
@@ -665,6 +739,80 @@ class LDDMM:
         self.GDBetaAffineR = float(1.0)
         self.GDBetaAffineT = float(1.0)
         
+        # adam optimizer variables
+        if self.params['optimizer'] == "adam":
+            self.sgd_M = torch.ones(self.M.shape).type(self.params['dtype']).to(device=self.params['cuda'])
+            self.sgd_maskiter = 0
+            #self.params['adam_alpha'] = torch.Tensor(self.params['adam_alpha']).type(self.params['dtype']).to(device=self.params['cuda'])
+            #self.params['adam_beta1'] = torch.Tensor(self.params['adam_beta1']).type(self.params['dtype']).to(device=self.params['cuda'])
+            #self.params['adam_beta2'] = torch.Tensor(self.params['adam_beta2']).type(self.params['dtype']).to(device=self.params['cuda'])
+            #self.params['adam_epsilon'] = torch.Tensor(self.params['adam_epsilon']).type(self.params['dtype']).to(device=self.params['cuda'])
+            self.adam = {}
+            self.adam['m0'] = []
+            self.adam['m1'] = []
+            self.adam['m2'] = []
+            self.adam['v0'] = []
+            self.adam['v1'] = []
+            self.adam['v2'] = []
+            for i in range(self.params['nt']):
+                self.adam['m0'].append(torch.tensor(np.zeros((int(np.round(self.nx[0]*self.params['v_scale'])),int(np.round(self.nx[1]*self.params['v_scale'])),int(np.round(self.nx[2]*self.params['v_scale']))))).type(self.params['dtype']).to(device=self.params['cuda']))
+                self.adam['m1'].append(torch.tensor(np.zeros((int(np.round(self.nx[0]*self.params['v_scale'])),int(np.round(self.nx[1]*self.params['v_scale'])),int(np.round(self.nx[2]*self.params['v_scale']))))).type(self.params['dtype']).to(device=self.params['cuda']))
+                self.adam['m2'].append(torch.tensor(np.zeros((int(np.round(self.nx[0]*self.params['v_scale'])),int(np.round(self.nx[1]*self.params['v_scale'])),int(np.round(self.nx[2]*self.params['v_scale']))))).type(self.params['dtype']).to(device=self.params['cuda']))
+                self.adam['v0'].append(torch.tensor(np.zeros((int(np.round(self.nx[0]*self.params['v_scale'])),int(np.round(self.nx[1]*self.params['v_scale'])),int(np.round(self.nx[2]*self.params['v_scale']))))).type(self.params['dtype']).to(device=self.params['cuda']))
+                self.adam['v1'].append(torch.tensor(np.zeros((int(np.round(self.nx[0]*self.params['v_scale'])),int(np.round(self.nx[1]*self.params['v_scale'])),int(np.round(self.nx[2]*self.params['v_scale']))))).type(self.params['dtype']).to(device=self.params['cuda']))
+                self.adam['v2'].append(torch.tensor(np.zeros((int(np.round(self.nx[0]*self.params['v_scale'])),int(np.round(self.nx[1]*self.params['v_scale'])),int(np.round(self.nx[2]*self.params['v_scale']))))).type(self.params['dtype']).to(device=self.params['cuda']))
+        
+        # adadelta optimizer variables
+        if self.params['optimizer'] == 'adadelta':
+            self.adadelta = {}
+            # here we call m0 the accumulator for the gradients and v0 the accumulator for the parameter itself
+            self.adadelta['m0'] = []
+            self.adadelta['m1'] = []
+            self.adadelta['m2'] = []
+            self.adadelta['v0'] = []
+            self.adadelta['v1'] = []
+            self.adadelta['v2'] = []
+            for i in range(self.params['nt']):
+                self.adadelta['m0'].append(torch.tensor(np.zeros((int(np.round(self.nx[0]*self.params['v_scale'])),int(np.round(self.nx[1]*self.params['v_scale'])),int(np.round(self.nx[2]*self.params['v_scale']))))).type(self.params['dtype']).to(device=self.params['cuda']))
+                self.adadelta['m1'].append(torch.tensor(np.zeros((int(np.round(self.nx[0]*self.params['v_scale'])),int(np.round(self.nx[1]*self.params['v_scale'])),int(np.round(self.nx[2]*self.params['v_scale']))))).type(self.params['dtype']).to(device=self.params['cuda']))
+                self.adadelta['m2'].append(torch.tensor(np.zeros((int(np.round(self.nx[0]*self.params['v_scale'])),int(np.round(self.nx[1]*self.params['v_scale'])),int(np.round(self.nx[2]*self.params['v_scale']))))).type(self.params['dtype']).to(device=self.params['cuda']))
+                self.adadelta['v0'].append(torch.tensor(np.zeros((int(np.round(self.nx[0]*self.params['v_scale'])),int(np.round(self.nx[1]*self.params['v_scale'])),int(np.round(self.nx[2]*self.params['v_scale']))))).type(self.params['dtype']).to(device=self.params['cuda']))
+                self.adadelta['v1'].append(torch.tensor(np.zeros((int(np.round(self.nx[0]*self.params['v_scale'])),int(np.round(self.nx[1]*self.params['v_scale'])),int(np.round(self.nx[2]*self.params['v_scale']))))).type(self.params['dtype']).to(device=self.params['cuda']))
+                self.adadelta['v2'].append(torch.tensor(np.zeros((int(np.round(self.nx[0]*self.params['v_scale'])),int(np.round(self.nx[1]*self.params['v_scale'])),int(np.round(self.nx[2]*self.params['v_scale']))))).type(self.params['dtype']).to(device=self.params['cuda']))
+        
+        # rmsprop optimizer variables
+        if self.params['optimizer'] == 'rmsprop':
+            self.sgd_M = torch.ones(self.M.shape).type(self.params['dtype']).to(device=self.params['cuda'])
+            self.sgd_maskiter = 0
+            self.rmsprop = {}
+            # here we call m0 the accumulator for the gradients and v0 the accumulator for the parameter itself
+            self.rmsprop['m0'] = []
+            self.rmsprop['m1'] = []
+            self.rmsprop['m2'] = []
+            for i in range(self.params['nt']):
+                self.rmsprop['m0'].append(torch.tensor(np.zeros((int(np.round(self.nx[0]*self.params['v_scale'])),int(np.round(self.nx[1]*self.params['v_scale'])),int(np.round(self.nx[2]*self.params['v_scale']))))).type(self.params['dtype']).to(device=self.params['cuda']))
+                self.rmsprop['m1'].append(torch.tensor(np.zeros((int(np.round(self.nx[0]*self.params['v_scale'])),int(np.round(self.nx[1]*self.params['v_scale'])),int(np.round(self.nx[2]*self.params['v_scale']))))).type(self.params['dtype']).to(device=self.params['cuda']))
+                self.rmsprop['m2'].append(torch.tensor(np.zeros((int(np.round(self.nx[0]*self.params['v_scale'])),int(np.round(self.nx[1]*self.params['v_scale'])),int(np.round(self.nx[2]*self.params['v_scale']))))).type(self.params['dtype']).to(device=self.params['cuda']))
+        
+        # SGD mask initialization
+        if self.params['optimizer'] == 'sgd':
+            self.sgd_M = torch.ones(self.M.shape).type(self.params['dtype']).to(device=self.params['cuda'])
+            self.sgd_maskiter = 0
+        
+        # SGDM initialization
+        if self.params['optimizer'] == 'sgdm':
+            self.sgd_M = torch.ones(self.M.shape).type(self.params['dtype']).to(device=self.params['cuda'])
+            # here we call m0 the accumulator for the gradients and v0 the accumulator for the parameter itself
+            self.sgdm = {}
+            self.sgdm['m0'] = []
+            self.sgdm['m1'] = []
+            self.sgdm['m2'] = []
+            for i in range(self.params['nt']):
+                self.sgdm['m0'].append(torch.tensor(np.zeros((int(np.round(self.nx[0]*self.params['v_scale'])),int(np.round(self.nx[1]*self.params['v_scale'])),int(np.round(self.nx[2]*self.params['v_scale']))))).type(self.params['dtype']).to(device=self.params['cuda']))
+                self.sgdm['m1'].append(torch.tensor(np.zeros((int(np.round(self.nx[0]*self.params['v_scale'])),int(np.round(self.nx[1]*self.params['v_scale'])),int(np.round(self.nx[2]*self.params['v_scale']))))).type(self.params['dtype']).to(device=self.params['cuda']))
+                self.sgdm['m2'].append(torch.tensor(np.zeros((int(np.round(self.nx[0]*self.params['v_scale'])),int(np.round(self.nx[1]*self.params['v_scale'])),int(np.round(self.nx[2]*self.params['v_scale']))))).type(self.params['dtype']).to(device=self.params['cuda']))
+            self.sgd_maskiter = 0
+        
         # reset initializer flags
         self.initializer_flags['load'] = 0
         self.initializer_flags['lddmm'] = 0
@@ -1001,6 +1149,7 @@ class LDDMM:
         return phiinv0_gpu, phiinv1_gpu, phiinv2_gpu
     
     # compute contrast correction values
+    # NOTE: does not subsample image for SGD for now
     def computeLinearContrastTransform(self,I,J,weight=1.0):
         Ibar = torch.sum(I*weight*self.M)/torch.sum(weight*self.M)
         Jbar = torch.sum(J*weight*self.M)/torch.sum(weight*self.M)
@@ -1084,6 +1233,9 @@ class LDDMM:
                 else:
                     lambda1[i] = -1*self.M*( ((self.applyThisTransformNT(self.I[i]) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])/self.params['sigma'][i]**2 # may not need to store this
                     EM += torch.sum(self.M*( ((self.applyThisTransformNT(self.I[i]) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
+                
+                if self.params['optimizer'] == 'sgd':
+                    lambda1[i] *= self.sgd_M
         else:
             for i in range(len(self.I)):
                 if i in self.params['we_channels']:
@@ -1095,6 +1247,9 @@ class LDDMM:
                             else:
                                 lambda1[i] = -1*self.W[i][ii]*self.M*( ((self.applyThisTransformNT(self.I[i]) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])/self.params['sigma'][i]**2
                                 EM += torch.sum(self.W[i][ii]*self.M*( ((self.applyThisTransformNT(self.I[i]) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
+                            
+                            if self.params['optimizer'] == 'sgd':
+                                lambda1[i] *= self.sgd_M
                         else:
                             EM += torch.sum(self.W[i][ii]*self.M*( self.we_C[i][ii] - self.J[i])**2/(2.0*self.params['sigmaW'][ii]**2))*self.dx[0]*self.dx[1]*self.dx[2]
                 else:
@@ -1104,6 +1259,10 @@ class LDDMM:
                     else:
                         lambda1[i] = -1*self.M*( ((self.applyThisTransformNT(self.I[i]) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])/self.params['sigma'][i]**2 # may not need to store this
                         EM += torch.sum(self.M*( ((self.applyThisTransformNT(self.I[i]) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
+                    
+                    if self.params['optimizer'] == 'sgd':
+                        lambda1[i] *= self.sgd_M
+        
         return lambda1, EM
     
     # compute matching energy
@@ -1141,6 +1300,34 @@ class LDDMM:
             EM += torch.sum(self.M*( ((I[i] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]
         return EM
     
+    # update sgd subsampling mask
+    def updateSGDMask(self):
+        self.sgd_maskiter += 1
+        if self.sgd_maskiter == self.params['sg_holdcount']:
+            self.sgd_maskiter = 0
+        else:
+            return
+        
+        if self.params['sg_mask_mode'] == 'gauss':
+            self.sgd_M = mygaussian_3d_torch_selectcenter_meshgrid(self.X0,self.X1,self.X2,self.params['sg_sigma'],((torch.rand(1)-0.5)*self.nx[0]*self.dx[0]/2.0).type(self.params['dtype']).to(device=self.params['cuda']),((torch.rand(1)-0.5)*self.nx[1]*self.dx[1]/2).type(self.params['dtype']).to(device=self.params['cuda']),((torch.rand(1)-0.5)*self.nx[2]*self.dx[2]/2.0).type(self.params['dtype']).to(device=self.params['cuda']))
+        elif self.params['sg_mask_mode'] == '2gauss':
+            self.sgd_M = mygaussian_3d_torch_selectcenter_meshgrid(self.X0,self.X1,self.X2,self.params['sg_sigma'],((torch.rand(1)-0.5)*self.nx[0]*self.dx[0]/2.0).type(self.params['dtype']).to(device=self.params['cuda']),((torch.rand(1)-0.5)*self.nx[1]*self.dx[1]/2).type(self.params['dtype']).to(device=self.params['cuda']),((torch.rand(1)-0.5)*self.nx[2]*self.dx[2]/2.0).type(self.params['dtype']).to(device=self.params['cuda'])) + mygaussian_3d_torch_selectcenter_meshgrid(self.X0,self.X1,self.X2,self.params['sg_sigma'],((torch.rand(1)-0.5)*self.nx[0]*self.dx[0]/2.0).type(self.params['dtype']).to(device=self.params['cuda']),((torch.rand(1)-0.5)*self.nx[1]*self.dx[1]/2).type(self.params['dtype']).to(device=self.params['cuda']),((torch.rand(1)-0.5)*self.nx[2]*self.dx[2]/2.0).type(self.params['dtype']).to(device=self.params['cuda']))
+        elif self.params['sg_mask_mode'] == '3gauss':
+            self.sgd_M = mygaussian_3d_torch_selectcenter_meshgrid(self.X0,self.X1,self.X2,self.params['sg_sigma'],((torch.rand(1)-0.5)*self.nx[0]*self.dx[0]/2.0).type(self.params['dtype']).to(device=self.params['cuda']),((torch.rand(1)-0.5)*self.nx[1]*self.dx[1]/2).type(self.params['dtype']).to(device=self.params['cuda']),((torch.rand(1)-0.5)*self.nx[2]*self.dx[2]/2.0).type(self.params['dtype']).to(device=self.params['cuda'])) + mygaussian_3d_torch_selectcenter_meshgrid(self.X0,self.X1,self.X2,self.params['sg_sigma'],((torch.rand(1)-0.5)*self.nx[0]*self.dx[0]/2.0).type(self.params['dtype']).to(device=self.params['cuda']),((torch.rand(1)-0.5)*self.nx[1]*self.dx[1]/2).type(self.params['dtype']).to(device=self.params['cuda']),((torch.rand(1)-0.5)*self.nx[2]*self.dx[2]/2.0).type(self.params['dtype']).to(device=self.params['cuda'])) + mygaussian_3d_torch_selectcenter_meshgrid(self.X0,self.X1,self.X2,self.params['sg_sigma'],((torch.rand(1)-0.5)*self.nx[0]*self.dx[0]/2.0).type(self.params['dtype']).to(device=self.params['cuda']),((torch.rand(1)-0.5)*self.nx[1]*self.dx[1]/2).type(self.params['dtype']).to(device=self.params['cuda']),((torch.rand(1)-0.5)*self.nx[2]*self.dx[2]/2.0).type(self.params['dtype']).to(device=self.params['cuda']))
+        elif self.params['sg_mask_mode'] == 'rand':
+            self.sgd_M = self.params['sg_rand_scale']*torch.rand((self.nx[0],self.nx[1],self.nx[2])).type(self.params['dtype']).to(device=self.params['cuda'])
+        elif self.params['sg_mask_mode'] == 'binrand':
+            self.sgd_M = torch.round(self.params['sg_rand_scale']*torch.rand((self.nx[0],self.nx[1],self.nx[2])).type(self.params['dtype']).to(device=self.params['cuda']))
+        elif self.params['sg_mask_mode'][0:5] == 'gauss' and len(self.params['sg_mask_mode']) > 5:
+            self.sgd_M = mygaussian_3d_torch_selectcenter_meshgrid(self.X0,self.X1,self.X2,self.params['sg_sigma'],((torch.rand(1)-0.5)*self.nx[0]*self.dx[0]/2.0).type(self.params['dtype']).to(device=self.params['cuda']),((torch.rand(1)-0.5)*self.nx[1]*self.dx[1]/2).type(self.params['dtype']).to(device=self.params['cuda']),((torch.rand(1)-0.5)*self.nx[2]*self.dx[2]/2.0).type(self.params['dtype']).to(device=self.params['cuda']))
+            for i in range(int(self.params['sg_mask_mode'][5:])-1):
+                self.sgd_M += mygaussian_3d_torch_selectcenter_meshgrid(self.X0,self.X1,self.X2,self.params['sg_sigma'],((torch.rand(1)-0.5)*self.nx[0]*self.dx[0]/2.0).type(self.params['dtype']).to(device=self.params['cuda']),((torch.rand(1)-0.5)*self.nx[1]*self.dx[1]/2).type(self.params['dtype']).to(device=self.params['cuda']),((torch.rand(1)-0.5)*self.nx[2]*self.dx[2]/2.0).type(self.params['dtype']).to(device=self.params['cuda']))
+        elif self.params['sg_mask_mode'][0:8] == 'bingauss' and len(self.params['sg_mask_mode']) > 8:
+            self.sgd_M = torch.round(mygaussian_3d_torch_selectcenter_meshgrid(self.X0,self.X1,self.X2,self.params['sg_sigma'],((torch.rand(1)-0.5)*self.nx[0]*self.dx[0]/2.0).type(self.params['dtype']).to(device=self.params['cuda']),((torch.rand(1)-0.5)*self.nx[1]*self.dx[1]/2).type(self.params['dtype']).to(device=self.params['cuda']),((torch.rand(1)-0.5)*self.nx[2]*self.dx[2]/2.0).type(self.params['dtype']).to(device=self.params['cuda'])))
+            for i in range(int(self.params['sg_mask_mode'][8:])-1):
+                self.sgd_M += torch.round(mygaussian_3d_torch_selectcenter_meshgrid(self.X0,self.X1,self.X2,self.params['sg_sigma'],((torch.rand(1)-0.5)*self.nx[0]*self.dx[0]/2.0).type(self.params['dtype']).to(device=self.params['cuda']),((torch.rand(1)-0.5)*self.nx[1]*self.dx[1]/2).type(self.params['dtype']).to(device=self.params['cuda']),((torch.rand(1)-0.5)*self.nx[2]*self.dx[2]/2.0).type(self.params['dtype']).to(device=self.params['cuda'])))
+            
+    
     # update learning rate for gradient descent
     def updateGDLearningRate(self):
         flag = False
@@ -1168,6 +1355,58 @@ class LDDMM:
                     
                     if self.EMAffineT[-1] > self.EMAffineR[-1]:
                         self.GDBetaAffineT *= 0.7
+            elif self.params['optimizer'] == 'sgd' and len(self.EAll) >= self.params['sg_climbcount']:
+                climbcheck = 0
+                if self.params['checkaffinestep'] == 0 and self.params['do_affine'] == 0:
+                    # energy increased
+                    while climbcheck < self.params['sg_climbcount']:
+                        if self.EAll[-1-climbcheck] >= self.EAll[-2-climbcheck] or self.EAll[-1-climbcheck]/self.EAll[-2-climbcheck] > 0.99999:
+                            climbcheck += 1
+                            if climbcheck == self.params['sg_climbcount']:
+                                self.GDBeta *= 0.7
+                                break
+                        else:
+                            break
+                elif self.params['checkaffinestep'] == 0 and self.params['do_affine'] > 0:
+                    # energy increased
+                    while climbcheck < self.params['sg_climbcount']:
+                        if self.EAll[-1-climbcheck] >= self.EAll[-2-climbcheck] or self.EAll[-1-climbcheck]/self.EAll[-2-climbcheck] > 0.99999:
+                            climbcheck += 1
+                            if climbcheck == self.params['sg_climbcount']:
+                                if self.params['do_lddmm'] == 1:
+                                    self.GDBeta *= 0.7
+
+                                self.GDBetaAffineR *= 0.7
+                                self.GDBetaAffineT *= 0.7
+                                break
+                        else:
+                            break
+                elif self.params['checkaffinestep'] == 1 and self.params['do_affine'] > 0:
+                    # if diffeo energy increased
+                    while climbcheck < self.params['sg_climbcount']:
+                        if self.ERAll[-1-climbcheck] + self.EMDiffeo[-1-climbcheck] > self.EAll[-2-climbcheck]:
+                            climbcheck += 1
+                            if climbcheck == self.params['sg_climbcount']:
+                                self.GDBeta *= 0.7
+                                break
+                            else:
+                                break
+                        
+                        if self.EMAffineR[-1-climbcheck] > self.EMDiffeo[-1-climbcheck]:
+                            climbcheck += 1
+                            if climbcheck == self.params['sg_climbcount']:
+                                self.GDBetaAffineR *= 0.7
+                                break
+                            else:
+                                break
+
+                        if self.EMAffineT[-1-climbcheck] > self.EMAffineR[-1-climbcheck]:
+                            climbcheck += 1
+                            if climbcheck == self.params['sg_climbcount']:
+                                self.GDBetaAffineT *= 0.7
+                                break
+                            else:
+                                break
             
             elif self.params['optimizer'] == 'gdw':
                 # energy increased
@@ -1207,11 +1446,27 @@ class LDDMM:
         gi_x = [None]*len(self.I)
         gi_y = [None]*len(self.I)
         gi_z = [None]*len(self.I)
+        #if self.params['v_scale'] != 1:
+        #    grad_divisor_x_scale = np.ones(self.X0.shape)
+        #    grad_divisor_x_scale[1:-1,:,:] = 2
+        #    grad_divisor_x_scale = torch.tensor(grad_divisor_x_scale).type(self.params['dtype']).to(device=self.params['cuda'])
+        #    grad_divisor_y_scale = np.ones(self.X0.shape)
+        #    grad_divisor_y_scale[:,1:-1,:] = 2
+        #    grad_divisor_y_scale = torch.tensor(grad_divisor_y_scale).type(self.params['dtype']).to(device=self.params['cuda'])
+        #    grad_divisor_z_scale = np.ones(self.X0.shape)
+        #    grad_divisor_z_scale[:,:,1:-1] = 2
+        #    grad_divisor_z_scale = torch.tensor(grad_divisor_z_scale).type(self.params['dtype']).to(device=self.params['cuda'])
         for i in range(len(self.I)):
             if self.params['low_memory'] == 0:
-                gi_x[i],gi_y[i],gi_z[i] = self.torch_gradient(((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]),self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)
+                if self.params['v_scale'] != 1.0:
+                    gi_x[i],gi_y[i],gi_z[i] = self.torch_gradient(torch.squeeze(torch.nn.functional.interpolate(((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]).unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))
+                else:
+                    gi_x[i],gi_y[i],gi_z[i] = self.torch_gradient(((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]),self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)
             else:
-                gi_x[i],gi_y[i],gi_z[i] = self.torch_gradient(((self.applyThisTransformNT(self.I[i]) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]),self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)
+                if self.params['v_scale'] != 1.0:
+                    gi_x[i],gi_y[i],gi_z[i] = self.torch_gradient(torch.squeeze(torch.nn.functional.interpolate(((self.applyThisTransformNT(self.I[i]) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]).unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))
+                else:
+                    gi_x[i],gi_y[i],gi_z[i] = self.torch_gradient(((self.applyThisTransformNT(self.I[i]) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]),self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)
             # TODO: can this be efficiently vectorized?
             for r in range(3):
                 for c in range(4):
@@ -1224,12 +1479,12 @@ class LDDMM:
                     #AdABZ = AdAB[2,0]*self.X0 + AdAB[2,1]*self.X1 + AdAB[2,2]*self.X2 + AdAB[2,3]
                     if i == 0:
                         if self.params['v_scale'] != 1.0:
-                            self.gradA[r,c] = torch.sum( torch.squeeze(torch.nn.functional.interpolate(torch.nn.functional.conv3d(lambda1[i].unsqueeze(0).unsqueeze(0),self.gaussian_filter.unsqueeze(0).unsqueeze(0), stride=1, padding = int(self.gaussian_filter.shape[0]/2.0)),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)) * ( gi_x[i]*(AdAB[0,0]*(self.X0) + AdAB[0,1]*(self.X1) + AdAB[0,2]*(self.X2) + AdAB[0,3]) + gi_y[i]*(AdAB[1,0]*(self.X0) + AdAB[1,1]*(self.X1) + AdAB[1,2]*(self.X2) + AdAB[1,3]) + gi_z[i]*(AdAB[2,0]*(self.X0) + AdAB[2,1]*(self.X1) + AdAB[2,2]*(self.X2) + AdAB[2,3]) ) ) * self.dx[0]*self.dx[1]*self.dx[2]
+                            self.gradA[r,c] = torch.sum( torch.squeeze(torch.nn.functional.interpolate(lambda1[i].unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)) * ( gi_x[i]*(AdAB[0,0]*(self.X0) + AdAB[0,1]*(self.X1) + AdAB[0,2]*(self.X2) + AdAB[0,3]) + gi_y[i]*(AdAB[1,0]*(self.X0) + AdAB[1,1]*(self.X1) + AdAB[1,2]*(self.X2) + AdAB[1,3]) + gi_z[i]*(AdAB[2,0]*(self.X0) + AdAB[2,1]*(self.X1) + AdAB[2,2]*(self.X2) + AdAB[2,3]) ) ) * self.dx[0]*self.dx[1]*self.dx[2]
                         else:
                             self.gradA[r,c] = torch.sum( lambda1[i] * ( gi_x[i]*(AdAB[0,0]*(self.X0) + AdAB[0,1]*(self.X1) + AdAB[0,2]*(self.X2) + AdAB[0,3]) + gi_y[i]*(AdAB[1,0]*(self.X0) + AdAB[1,1]*(self.X1) + AdAB[1,2]*(self.X2) + AdAB[1,3]) + gi_z[i]*(AdAB[2,0]*(self.X0) + AdAB[2,1]*(self.X1) + AdAB[2,2]*(self.X2) + AdAB[2,3]) ) ) * self.dx[0]*self.dx[1]*self.dx[2]
                     else:
                         if self.params['v_scale'] != 1.0:
-                            self.gradA[r,c] += torch.sum( torch.squeeze(torch.nn.functional.interpolate(torch.nn.functional.conv3d(lambda1[i].unsqueeze(0).unsqueeze(0),self.gaussian_filter.unsqueeze(0).unsqueeze(0), stride=1, padding = int(self.gaussian_filter.shape[0]/2.0)),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)) * ( gi_x[i]*(AdAB[0,0]*(self.X0) + AdAB[0,1]*(self.X1) + AdAB[0,2]*(self.X2) + AdAB[0,3]) + gi_y[i]*(AdAB[1,0]*(self.X0) + AdAB[1,1]*(self.X1) + AdAB[1,2]*(self.X2) + AdAB[1,3]) + gi_z[i]*(AdAB[2,0]*(self.X0) + AdAB[2,1]*(self.X1) + AdAB[2,2]*(self.X2) + AdAB[2,3]) ) ) * self.dx[0]*self.dx[1]*self.dx[2]
+                            self.gradA[r,c] += torch.sum( torch.squeeze(torch.nn.functional.interpolate(lambda1[i].unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)) * ( gi_x[i]*(AdAB[0,0]*(self.X0) + AdAB[0,1]*(self.X1) + AdAB[0,2]*(self.X2) + AdAB[0,3]) + gi_y[i]*(AdAB[1,0]*(self.X0) + AdAB[1,1]*(self.X1) + AdAB[1,2]*(self.X2) + AdAB[1,3]) + gi_z[i]*(AdAB[2,0]*(self.X0) + AdAB[2,1]*(self.X1) + AdAB[2,2]*(self.X2) + AdAB[2,3]) ) ) * self.dx[0]*self.dx[1]*self.dx[2]
                         else:
                             self.gradA[r,c] += torch.sum( lambda1[i] * ( gi_x[i]*(AdAB[0,0]*(self.X0) + AdAB[0,1]*(self.X1) + AdAB[0,2]*(self.X2) + AdAB[0,3]) + gi_y[i]*(AdAB[1,0]*(self.X0) + AdAB[1,1]*(self.X1) + AdAB[1,2]*(self.X2) + AdAB[1,3]) + gi_z[i]*(AdAB[2,0]*(self.X0) + AdAB[2,1]*(self.X1) + AdAB[2,2]*(self.X2) + AdAB[2,3]) ) ) * self.dx[0]*self.dx[1]*self.dx[2]
                     #self.gradA[r,c] = torch.sum( lambda1 * ( gi_y*(AdAB[0,0]*self.X1 + AdAB[0,1]*self.X0 + AdAB[0,2]*self.X2 + AdAB[0,3]) + gi_x*(AdAB[1,0]*self.X1 + AdAB[1,1]*self.X0 + AdAB[1,2]*self.X2 + AdAB[1,3]) + gi_z*(AdAB[2,0]*self.X1 + AdAB[2,1]*self.X0 + AdAB[2,2]*self.X2 + AdAB[2,3]) ) ) * self.dx[0]*self.dx[1]*self.dx[2]
@@ -1237,6 +1492,13 @@ class LDDMM:
         # if rigid
         if mode == 'rigid':
             self.gradA -= torch.transpose(self.gradA,0,1)
+        
+        #if self.params['v_scale'] != 1:
+        #    del grad_divisor_x_scale
+        #    del grad_divisor_y_scale
+        #    del grad_divisor_z_scale
+        #    if self.params['low_memory'] == 1:
+        #        torch.cuda.empty_cache()
     
     # compute gradient per time step for time varying velocity field parameterization
     def calculateGradientVt(self,lambda1,t,phiinv0_gpu,phiinv1_gpu,phiinv2_gpu):
@@ -1246,9 +1508,15 @@ class LDDMM:
         phiinv2_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv2_gpu-self.X2).unsqueeze(0).unsqueeze(0),torch.stack(((self.X2+self.vt2[t]*self.dt)/(self.nx[2]*self.dx[2]-self.dx[2])*2,(self.X1+self.vt1[t]*self.dt)/(self.nx[1]*self.dx[1]-self.dx[1])*2,(self.X0+self.vt0[t]*self.dt)/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='border')) + (self.X2+self.vt2[t]*self.dt)
         
         # find the determinant of Jacobian
-        phiinv0_0,phiinv0_1,phiinv0_2 = self.torch_gradient(phiinv0_gpu,self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))
-        phiinv1_0,phiinv1_1,phiinv1_2 = self.torch_gradient(phiinv1_gpu,self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))
-        phiinv2_0,phiinv2_1,phiinv2_2 = self.torch_gradient(phiinv2_gpu,self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))
+        if self.params['v_scale'] != 1:
+            phiinv0_0,phiinv0_1,phiinv0_2 = self.torch_gradient(phiinv0_gpu,self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))
+            phiinv1_0,phiinv1_1,phiinv1_2 = self.torch_gradient(phiinv1_gpu,self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))
+            phiinv2_0,phiinv2_1,phiinv2_2 = self.torch_gradient(phiinv2_gpu,self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))
+        else:
+            phiinv0_0,phiinv0_1,phiinv0_2 = self.torch_gradient(phiinv0_gpu,self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)
+            phiinv1_0,phiinv1_1,phiinv1_2 = self.torch_gradient(phiinv1_gpu,self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)
+            phiinv2_0,phiinv2_1,phiinv2_2 = self.torch_gradient(phiinv2_gpu,self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)
+        
         detjac = phiinv0_0*(phiinv1_1*phiinv2_2 - phiinv1_2*phiinv2_1)\
             - phiinv0_1*(phiinv1_0*phiinv2_2 - phiinv1_2*phiinv2_0)\
             + phiinv0_2*(phiinv1_0*phiinv2_1 - phiinv1_1*phiinv2_0)
@@ -1267,12 +1535,18 @@ class LDDMM:
             if not hasattr(self, 'affineA'):
             #if self.params['do_affine'] == 0:
                 if self.params['v_scale'] < 1.0:
-                    lambdat = torch.squeeze(torch.nn.functional.grid_sample(torch.nn.functional.interpolate(torch.nn.functional.conv3d(lambda1[i].unsqueeze(0).unsqueeze(0),self.gaussian_filter.unsqueeze(0).unsqueeze(0), stride=1, padding = int(self.gaussian_filter.shape[0]/2.0)),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True), torch.stack((phiinv2_gpu/(self.nx[2]*self.dx[2]-self.dx[2])*2,phiinv1_gpu/(self.nx[1]*self.dx[1]-self.dx[1])*2,phiinv0_gpu/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='zeros'))*detjac
+                    if self.params['v_scale_smoothing'] == 1:
+                        lambdat = torch.squeeze(torch.nn.functional.grid_sample(torch.nn.functional.interpolate(torch.nn.functional.conv3d(lambda1[i].unsqueeze(0).unsqueeze(0),self.gaussian_filter.unsqueeze(0).unsqueeze(0), stride=1, padding = int(self.gaussian_filter.shape[0]/2.0)),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True), torch.stack((phiinv2_gpu/(self.nx[2]*self.dx[2]-self.dx[2])*2,phiinv1_gpu/(self.nx[1]*self.dx[1]-self.dx[1])*2,phiinv0_gpu/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='zeros'))*detjac
+                    else:
+                        lambdat = torch.squeeze(torch.nn.functional.grid_sample(torch.nn.functional.interpolate(lambda1[i].unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True), torch.stack((phiinv2_gpu/(self.nx[2]*self.dx[2]-self.dx[2])*2,phiinv1_gpu/(self.nx[1]*self.dx[1]-self.dx[1])*2,phiinv0_gpu/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='zeros'))*detjac
                 else:
                     lambdat = torch.squeeze(torch.nn.functional.grid_sample(lambda1[i].unsqueeze(0).unsqueeze(0), torch.stack((phiinv2_gpu/(self.nx[2]*self.dx[2]-self.dx[2])*2,phiinv1_gpu/(self.nx[1]*self.dx[1]-self.dx[1])*2,phiinv0_gpu/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='zeros'))*detjac
             else:
                 if self.params['v_scale'] < 1.0:
-                    lambdat = torch.squeeze(torch.nn.functional.grid_sample(torch.nn.functional.interpolate(torch.nn.functional.conv3d(lambda1[i].unsqueeze(0).unsqueeze(0),self.gaussian_filter.unsqueeze(0).unsqueeze(0), stride=1, padding = int(self.gaussian_filter.shape[0]/2.0)),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True), torch.stack((((self.affineA[2,0]*(phiinv0_gpu)) + (self.affineA[2,1]*(phiinv1_gpu)) + (self.affineA[2,2]*(phiinv2_gpu)) + self.affineA[2,3])/(self.nx[2]*self.dx[2]-self.dx[2])*2,((self.affineA[1,0]*(phiinv0_gpu)) + (self.affineA[1,1]*(phiinv1_gpu)) + (self.affineA[1,2]*(phiinv2_gpu)) + self.affineA[1,3])/(self.nx[1]*self.dx[1]-self.dx[1])*2,((self.affineA[0,0]*(phiinv0_gpu)) + (self.affineA[0,1]*(phiinv1_gpu)) + (self.affineA[0,2]*(phiinv2_gpu)) + self.affineA[0,3])/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='zeros'))*detjac*torch.abs(torch.det(self.affineA))
+                    if self.params['v_scale_smoothing'] == 1:
+                        lambdat = torch.squeeze(torch.nn.functional.grid_sample(torch.nn.functional.interpolate(torch.nn.functional.conv3d(lambda1[i].unsqueeze(0).unsqueeze(0),self.gaussian_filter.unsqueeze(0).unsqueeze(0), stride=1, padding = int(self.gaussian_filter.shape[0]/2.0)),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True), torch.stack((((self.affineA[2,0]*(phiinv0_gpu)) + (self.affineA[2,1]*(phiinv1_gpu)) + (self.affineA[2,2]*(phiinv2_gpu)) + self.affineA[2,3])/(self.nx[2]*self.dx[2]-self.dx[2])*2,((self.affineA[1,0]*(phiinv0_gpu)) + (self.affineA[1,1]*(phiinv1_gpu)) + (self.affineA[1,2]*(phiinv2_gpu)) + self.affineA[1,3])/(self.nx[1]*self.dx[1]-self.dx[1])*2,((self.affineA[0,0]*(phiinv0_gpu)) + (self.affineA[0,1]*(phiinv1_gpu)) + (self.affineA[0,2]*(phiinv2_gpu)) + self.affineA[0,3])/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='zeros'))*detjac*torch.abs(torch.det(self.affineA))
+                    else:
+                        lambdat = torch.squeeze(torch.nn.functional.grid_sample(torch.nn.functional.interpolate(lambda1[i].unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True), torch.stack((((self.affineA[2,0]*(phiinv0_gpu)) + (self.affineA[2,1]*(phiinv1_gpu)) + (self.affineA[2,2]*(phiinv2_gpu)) + self.affineA[2,3])/(self.nx[2]*self.dx[2]-self.dx[2])*2,((self.affineA[1,0]*(phiinv0_gpu)) + (self.affineA[1,1]*(phiinv1_gpu)) + (self.affineA[1,2]*(phiinv2_gpu)) + self.affineA[1,3])/(self.nx[1]*self.dx[1]-self.dx[1])*2,((self.affineA[0,0]*(phiinv0_gpu)) + (self.affineA[0,1]*(phiinv1_gpu)) + (self.affineA[0,2]*(phiinv2_gpu)) + self.affineA[0,3])/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='zeros'))*detjac*torch.abs(torch.det(self.affineA))
                 else:
                     lambdat = torch.squeeze(torch.nn.functional.grid_sample(lambda1[i].unsqueeze(0).unsqueeze(0), torch.stack((((self.affineA[2,0]*(phiinv0_gpu)) + (self.affineA[2,1]*(phiinv1_gpu)) + (self.affineA[2,2]*(phiinv2_gpu)) + self.affineA[2,3])/(self.nx[2]*self.dx[2]-self.dx[2])*2,((self.affineA[1,0]*(phiinv0_gpu)) + (self.affineA[1,1]*(phiinv1_gpu)) + (self.affineA[1,2]*(phiinv2_gpu)) + self.affineA[1,3])/(self.nx[1]*self.dx[1]-self.dx[1])*2,((self.affineA[0,0]*(phiinv0_gpu)) + (self.affineA[0,1]*(phiinv1_gpu)) + (self.affineA[0,2]*(phiinv2_gpu)) + self.affineA[0,3])/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='zeros'))*detjac*torch.abs(torch.det(self.affineA))
             
@@ -1281,24 +1555,36 @@ class LDDMM:
             if i == 0:
                 if self.params['low_memory'] == 0:
                     if self.params['v_scale'] != 1.0:
-                        #TODO: alternatively, compute image gradient and then downsample after
-                        grad_list = [x*lambdat for x in self.torch_gradient(torch.squeeze(torch.nn.functional.interpolate(torch.nn.functional.conv3d(((self.It[i][t] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]).unsqueeze(0).unsqueeze(0),self.gaussian_filter.unsqueeze(0).unsqueeze(0), stride=1, padding = int(self.gaussian_filter.shape[0]/2.0)),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))]
+                        if self.params['v_scale_smoothing'] == 1:
+                            #TODO: alternatively, compute image gradient and then downsample after
+                            grad_list = [x*lambdat for x in self.torch_gradient(torch.squeeze(torch.nn.functional.interpolate(torch.nn.functional.conv3d(((self.It[i][t] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]).unsqueeze(0).unsqueeze(0),self.gaussian_filter.unsqueeze(0).unsqueeze(0), stride=1, padding = int(self.gaussian_filter.shape[0]/2.0)),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))]
+                        else:
+                            grad_list = [x*lambdat for x in self.torch_gradient(torch.squeeze(torch.nn.functional.interpolate(((self.It[i][t] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]).unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))]
                     else:
                         grad_list = [x*lambdat for x in self.torch_gradient(((self.It[i][t] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]),self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)]
                 else:
                     if self.params['v_scale'] != 1.0:
-                        grad_list = [x*lambdat for x in self.torch_gradient(torch.squeeze(torch.nn.functional.interpolate(torch.nn.functional.conv3d(((self.applyThisTransformNT(self.I[i],nt=t) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]).unsqueeze(0).unsqueeze(0),self.gaussian_filter.unsqueeze(0).unsqueeze(0), stride=1, padding = int(self.gaussian_filter.shape[0]/2.0)),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))]
+                        if self.params['v_scale_smoothing'] == 1:
+                            grad_list = [x*lambdat for x in self.torch_gradient(torch.squeeze(torch.nn.functional.interpolate(torch.nn.functional.conv3d(((self.applyThisTransformNT(self.I[i],nt=t) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]).unsqueeze(0).unsqueeze(0),self.gaussian_filter.unsqueeze(0).unsqueeze(0), stride=1, padding = int(self.gaussian_filter.shape[0]/2.0)),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))]
+                        else:
+                            grad_list = [x*lambdat for x in self.torch_gradient(torch.squeeze(torch.nn.functional.interpolate(((self.applyThisTransformNT(self.I[i],nt=t) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]).unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))]
                     else:
                         grad_list = [x*lambdat for x in self.torch_gradient(((self.applyThisTransformNT(self.I[i],nt=t) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]),self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)]
             else:
                 if self.params['low_memory'] == 0:
                     if self.params['v_scale'] != 1.0:
-                        grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient(torch.squeeze(torch.nn.functional.interpolate(torch.nn.functional.conv3d(((self.It[i][t] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]).unsqueeze(0).unsqueeze(0),self.gaussian_filter.unsqueeze(0).unsqueeze(0), stride=1, padding = int(self.gaussian_filter.shape[0]/2.0)),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))])]
+                        if self.params['v_scale_smoothing'] == 1:
+                            grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient(torch.squeeze(torch.nn.functional.interpolate(torch.nn.functional.conv3d(((self.It[i][t] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]).unsqueeze(0).unsqueeze(0),self.gaussian_filter.unsqueeze(0).unsqueeze(0), stride=1, padding = int(self.gaussian_filter.shape[0]/2.0)),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))])]
+                        else:
+                            grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient(torch.squeeze(torch.nn.functional.interpolate(((self.It[i][t] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]).unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))])]
                     else:
                         grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient(((self.It[i][t] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]),self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)])]
                 else:
                     if self.params['v_scale'] != 1.0:
-                        grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient(torch.squeeze(torch.nn.functional.interpolate(torch.nn.functional.conv3d(((self.applyThisTransformNT(self.I[i],nt=t) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]).unsqueeze(0).unsqueeze(0),self.gaussian_filter.unsqueeze(0).unsqueeze(0), stride=1, padding = int(self.gaussian_filter.shape[0]/2.0)),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))])]
+                        if self.params['v_scale_smoothing'] == 1:
+                            grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient(torch.squeeze(torch.nn.functional.interpolate(torch.nn.functional.conv3d(((self.applyThisTransformNT(self.I[i],nt=t) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]).unsqueeze(0).unsqueeze(0),self.gaussian_filter.unsqueeze(0).unsqueeze(0), stride=1, padding = int(self.gaussian_filter.shape[0]/2.0)),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))])]
+                        else:
+                            grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient(torch.squeeze(torch.nn.functional.interpolate(((self.applyThisTransformNT(self.I[i],nt=t) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]).unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))])]
                     else:
                         grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient(((self.applyThisTransformNT(self.I[i],nt=t) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]),self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)])]
         
@@ -1307,12 +1593,13 @@ class LDDMM:
         if self.params['low_memory'] > 0:
             torch.cuda.empty_cache()
             
-        grad_list = [torch.irfft(torch.rfft(x,3,onesided=False)*self.Khat,3,onesided=False) for x in grad_list]
+        if self.params['optimizer'] != 'adam':
+            grad_list = [torch.irfft(torch.rfft(x,3,onesided=False)*self.Khat,3,onesided=False) for x in grad_list]
+            # add the regularization term
+            grad_list[0] += self.vt0[t]/self.params['sigmaR']**2
+            grad_list[1] += self.vt1[t]/self.params['sigmaR']**2
+            grad_list[2] += self.vt2[t]/self.params['sigmaR']**2
         
-        # add the regularization term
-        grad_list[0] += self.vt0[t]/self.params['sigmaR']**2
-        grad_list[1] += self.vt1[t]/self.params['sigmaR']**2
-        grad_list[2] += self.vt2[t]/self.params['sigmaR']**2
         return grad_list,phiinv0_gpu,phiinv1_gpu,phiinv2_gpu
     
     # compute gradient per time step for time varying velocity field parameterization
@@ -1354,14 +1641,91 @@ class LDDMM:
         return grad_list,phiinv0_gpu,phiinv1_gpu
     
     # update gradient
-    def updateGradientVt(self,t,grad_list):
-        self.vt0[t] -= self.params['epsilon']*self.GDBeta*grad_list[0]
-        self.vt1[t] -= self.params['epsilon']*self.GDBeta*grad_list[1]
-        if self.J[0].dim() > 2:
-            self.vt2[t] -= self.params['epsilon']*self.GDBeta*grad_list[2]
+    def updateGradientVt(self,t,grad_list,iter=0):
+        if self.params['optimizer'] == 'adam':
+            #self.vt0[t] -= self.params['adam_alpha']*(1-self.params['adam_beta2']**(iter+1))**(1/2) / (1-self.params['adam_beta1']**(iter+1)) * self.adam['m0'][t] / (torch.sqrt(self.adam['v0'][t]) + self.params['adam_epsilon'])
+            #self.vt1[t] -= self.params['adam_alpha']*(1-self.params['adam_beta2']**(iter+1))**(1/2) / (1-self.params['adam_beta1']**(iter+1)) * self.adam['m1'][t] / (torch.sqrt(self.adam['v1'][t]) + self.params['adam_epsilon'])
+            #if self.J[0].dim() > 2:
+            #    self.vt2[t] -= self.params['adam_alpha']*(1-self.params['adam_beta2']**(iter+1))**(1/2) / (1-self.params['adam_beta1']**(iter+1)) * self.adam['m2'][t] / (torch.sqrt(self.adam['v2'][t]) + self.params['adam_epsilon'])
+            #self.vt0[t] -= self.params['adam_alpha']*(1-self.params['adam_beta2']**(iter+1))**(1/2) / (1-self.params['adam_beta1']**(iter+1)) * self.adam['m0'][t] / ((self.adam['v0'][t]) + self.params['adam_epsilon'])
+            #self.vt1[t] -= self.params['adam_alpha']*(1-self.params['adam_beta2']**(iter+1))**(1/2) / (1-self.params['adam_beta1']**(iter+1)) * self.adam['m1'][t] / ((self.adam['v1'][t]) + self.params['adam_epsilon'])
+            #if self.J[0].dim() > 2:
+            #    self.vt2[t] -= self.params['adam_alpha']*(1-self.params['adam_beta2']**(iter+1))**(1/2) / (1-self.params['adam_beta1']**(iter+1)) * self.adam['m2'][t] / ((self.adam['v2'][t]) + self.params['adam_epsilon'])
+            self.vt0[t] -= self.params['adam_alpha']*(1-self.params['adam_beta2']**(iter+1))**(1/2) / (1-self.params['adam_beta1']**(iter+1)) * (torch.irfft(torch.rfft(self.adam['m0'][t] / (torch.sqrt(self.adam['v0'][t]) + self.params['adam_epsilon']),2,onesided=False)*self.Khat,2,onesided=False)) + self.vt0[t]/self.params['sigmaR']**2
+            self.vt1[t] -= self.params['adam_alpha']*(1-self.params['adam_beta2']**(iter+1))**(1/2) / (1-self.params['adam_beta1']**(iter+1)) * (torch.irfft(torch.rfft(self.adam['m1'][t] / (torch.sqrt(self.adam['v1'][t]) + self.params['adam_epsilon']),2,onesided=False)*self.Khat,2,onesided=False)) + self.vt1[t]/self.params['sigmaR']**2
+            if self.J[0].dim() > 2:
+                self.vt2[t] -= self.params['adam_alpha']*(1-self.params['adam_beta2']**(iter+1))**(1/2) / (1-self.params['adam_beta1']**(iter+1)) * (torch.irfft(torch.rfft(self.adam['m2'][t] / (torch.sqrt(self.adam['v2'][t]) + self.params['adam_epsilon']),2,onesided=False)*self.Khat,2,onesided=False)) + self.vt2[t]/self.params['sigmaR']**2
+        elif self.params['optimizer'] == "adadelta":
+            self.vt0[t] -= torch.irfft(torch.rfft(torch.sqrt(self.adadelta['v0'][t] + self.params['ada_epsilon']) / torch.sqrt(self.adadelta['m0'][t] + self.params['ada_epsilon']) * grad_list[0],3,onesided=False)*self.Khat,3,onesided=False)
+            self.vt1[t] -= torch.irfft(torch.rfft(torch.sqrt(self.adadelta['v1'][t] + self.params['ada_epsilon']) / torch.sqrt(self.adadelta['m1'][t] + self.params['ada_epsilon']) * grad_list[1],3,onesided=False)*self.Khat,3,onesided=False)
+            self.vt2[t] -= torch.irfft(torch.rfft(torch.sqrt(self.adadelta['v2'][t] + self.params['ada_epsilon']) / torch.sqrt(self.adadelta['m2'][t] + self.params['ada_epsilon']) * grad_list[2],3,onesided=False)*self.Khat,3,onesided=False)
+            self.adadelta['v0'][t] = self.params['ada_rho']*self.adadelta['v0'][t] + (1-self.params['ada_rho'])*(-1*torch.irfft(torch.rfft(torch.sqrt(self.adadelta['v0'][t] + self.params['ada_epsilon']) / torch.sqrt(self.adadelta['m0'][t] + self.params['ada_epsilon']) * grad_list[0],3,onesided=False)*self.Khat,3,onesided=False))**2
+            self.adadelta['v1'][t] = self.params['ada_rho']*self.adadelta['v1'][t] + (1-self.params['ada_rho'])*(-1*torch.irfft(torch.rfft(torch.sqrt(self.adadelta['v1'][t] + self.params['ada_epsilon']) / torch.sqrt(self.adadelta['m1'][t] + self.params['ada_epsilon']) * grad_list[1],3,onesided=False)*self.Khat,3,onesided=False))**2
+            self.adadelta['v2'][t] = self.params['ada_rho']*self.adadelta['v2'][t] + (1-self.params['ada_rho'])*(-1*torch.irfft(torch.rfft(torch.sqrt(self.adadelta['v2'][t] + self.params['ada_epsilon']) / torch.sqrt(self.adadelta['m2'][t] + self.params['ada_epsilon']) * grad_list[2],3,onesided=False)*self.Khat,3,onesided=False))**2
+            #self.vt0[t] -= (self.adadelta['v0'][t] + self.params['ada_epsilon']) / (self.adadelta['m0'][t] + self.params['ada_epsilon']) * grad_list[0]
+            #self.vt1[t] -= (self.adadelta['v1'][t] + self.params['ada_epsilon']) / (self.adadelta['m1'][t] + self.params['ada_epsilon']) * grad_list[1]
+            #self.vt2[t] -= (self.adadelta['v2'][t] + self.params['ada_epsilon']) / (self.adadelta['m2'][t] + self.params['ada_epsilon']) * grad_list[2]
+            #self.adadelta['v0'][t] = self.params['ada_rho']*self.adadelta['v0'][t] + (1-self.params['ada_rho'])*(-1*(self.adadelta['v0'][t] + self.params['ada_epsilon']) / (self.adadelta['m0'][t] + self.params['ada_epsilon']) * grad_list[0])**2
+            #self.adadelta['v1'][t] = self.params['ada_rho']*self.adadelta['v1'][t] + (1-self.params['ada_rho'])*(-1*(self.adadelta['v1'][t] + self.params['ada_epsilon']) / (self.adadelta['m1'][t] + self.params['ada_epsilon']) * grad_list[1])**2
+            #self.adadelta['v2'][t] = self.params['ada_rho']*self.adadelta['v2'][t] + (1-self.params['ada_rho'])*(-1*(self.adadelta['v2'][t] + self.params['ada_epsilon']) / (self.adadelta['m2'][t] + self.params['ada_epsilon']) * grad_list[2])**2
+        elif self.params['optimizer'] == 'rmsprop':
+            self.vt0[t] -= torch.irfft(torch.rfft(self.params['rms_alpha'] / torch.sqrt(self.rmsprop['m0'][t] + self.params['rms_epsilon']) * grad_list[0],3,onesided=False)*self.Khat,3,onesided=False) + self.vt0[t]/self.params['sigmaR']**2
+            self.vt1[t] -= torch.irfft(torch.rfft(self.params['rms_alpha'] / torch.sqrt(self.rmsprop['m1'][t] + self.params['rms_epsilon']) * grad_list[1],3,onesided=False)*self.Khat,3,onesided=False) + self.vt1[t]/self.params['sigmaR']**2
+            self.vt2[t] -= torch.irfft(torch.rfft(self.params['rms_alpha'] / torch.sqrt(self.rmsprop['m2'][t] + self.params['rms_epsilon']) * grad_list[2],3,onesided=False)*self.Khat,3,onesided=False) + self.vt2[t]/self.params['sigmaR']**2
+        elif self.params['optimizer'] == 'sgdm':
+            self.vt0[t] -= self.sgdm['m0'][t]
+            self.vt1[t] -= self.sgdm['m1'][t]
+            self.vt2[t] -= self.sgdm['m2'][t]
+        else:
+            self.vt0[t] -= self.params['epsilon']*self.GDBeta*grad_list[0]
+            self.vt1[t] -= self.params['epsilon']*self.GDBeta*grad_list[1]
+            if self.J[0].dim() > 2:
+                self.vt2[t] -= self.params['epsilon']*self.GDBeta*grad_list[2]
+    
+    # update adam parameters
+    def updateAdamLearningRate(self,t,grad_list):
+        # don't normalize here, save normalization for the update step
+        #self.adam['m0'][t] = [self.params['adam_beta1']*x + (1-self.params['adam_beta1'])*y for (x,y) in zip(self.adam['m0'],grad_list[0])]
+        #self.adam['m1'][t] = [self.params['adam_beta1']*x + (1-self.params['adam_beta1'])*y for (x,y) in zip(self.adam['m1'],grad_list[1])]
+        #self.adam['m2'][t] = [self.params['adam_beta1']*x + (1-self.params['adam_beta1'])*y for (x,y) in zip(self.adam['m2'],grad_list[2])]
+        #self.adam['v0'][t] = [self.params['adam_beta2']*x + (1-self.params['adam_beta2'])*(y**2) for (x,y) in zip(self.adam['v0'],grad_list[0])]
+        #self.adam['v1'][t] = [self.params['adam_beta2']*x + (1-self.params['adam_beta2'])*(y**2) for (x,y) in zip(self.adam['v1'],grad_list[1])]
+        #self.adam['v2'][t] = [self.params['adam_beta2']*x + (1-self.params['adam_beta2'])*(y**2) for (x,y) in zip(self.adam['v2'],grad_list[2])]
+        self.adam['m0'][t] = self.params['adam_beta1']*self.adam['m0'][t] + (1-self.params['adam_beta1'])*grad_list[0]
+        self.adam['m1'][t] = self.params['adam_beta1']*self.adam['m1'][t] + (1-self.params['adam_beta1'])*grad_list[1]
+        self.adam['m2'][t] = self.params['adam_beta1']*self.adam['m2'][t] + (1-self.params['adam_beta1'])*grad_list[2]
+        self.adam['v0'][t] = self.params['adam_beta2']*self.adam['v0'][t] + (1-self.params['adam_beta2'])*(grad_list[0]**2)
+        self.adam['v1'][t] = self.params['adam_beta2']*self.adam['v1'][t] + (1-self.params['adam_beta2'])*(grad_list[1]**2)
+        self.adam['v2'][t] = self.params['adam_beta2']*self.adam['v2'][t] + (1-self.params['adam_beta2'])*(grad_list[2]**2)
+    
+    # update adadelta parameters
+    def updateAdadeltaLearningRate(self,t,grad_list):
+        # accumulate gradient
+        self.adadelta['m0'][t] = self.params['ada_rho']*self.adadelta['m0'][t] + (1-self.params['ada_rho'])*grad_list[0]**2
+        self.adadelta['m1'][t] = self.params['ada_rho']*self.adadelta['m1'][t] + (1-self.params['ada_rho'])*grad_list[1]**2
+        self.adadelta['m2'][t] = self.params['ada_rho']*self.adadelta['m2'][t] + (1-self.params['ada_rho'])*grad_list[2]**2
+        # accumulate parameter update
+        #self.adadelta['v0'][t] = self.params['ada_rho']*self.adadelta['v0'][t] + (1-self.params['ada_rho'])*self.vt0[t]**2
+        #self.adadelta['v1'][t] = self.params['ada_rho']*self.adadelta['v1'][t] + (1-self.params['ada_rho'])*self.vt1[t]**2
+        #self.adadelta['v2'][t] = self.params['ada_rho']*self.adadelta['v2'][t] + (1-self.params['ada_rho'])*self.vt2[t]**2
+        # this is the update step
+        #-1 * torch.sqrt(self.adadelta['v0'][t] + self.params['ada_epsilon']) / torch.sqrt(self.adadelta['m0'][t] + self.params['ada_epsilon']) * grad_list[0]
+    
+    # update rmsprop parameters
+    def updateRMSPropLearningRate(self,t,grad_list):
+        self.rmsprop['m0'][t] = self.params['rms_rho']*self.rmsprop['m0'][t] + (1-self.params['rms_rho'])*grad_list[0]**2
+        self.rmsprop['m1'][t] = self.params['rms_rho']*self.rmsprop['m1'][t] + (1-self.params['rms_rho'])*grad_list[1]**2
+        self.rmsprop['m2'][t] = self.params['rms_rho']*self.rmsprop['m2'][t] + (1-self.params['rms_rho'])*grad_list[2]**2
+    
+    # update sgdm parameters
+    def updateSGDMLearningRate(self,t,grad_list):
+        # do I need GDBeta here?
+        self.sgdm['m0'][t] = self.params['sg_gamma']*self.sgdm['m0'][t] + self.params['epsilon']*self.GDBeta*grad_list[0]
+        self.sgdm['m1'][t] = self.params['sg_gamma']*self.sgdm['m1'][t] + self.params['epsilon']*self.GDBeta*grad_list[1]
+        self.sgdm['m2'][t] = self.params['sg_gamma']*self.sgdm['m2'][t] + self.params['epsilon']*self.GDBeta*grad_list[2]
     
     # convenience function for calculating and updating gradients of Vt
-    def calculateAndUpdateGradientsVt(self, lambda1):
+    def calculateAndUpdateGradientsVt(self, lambda1, iter=0):
         phiinv0_gpu = self.X0.clone()
         phiinv1_gpu = self.X1.clone()
         if self.J[0].dim() > 2:
@@ -1372,7 +1736,17 @@ class LDDMM:
                 grad_list,phiinv0_gpu,phiinv1_gpu,phiinv2_gpu = self.calculateGradientVt(lambda1,t,phiinv0_gpu,phiinv1_gpu,phiinv2_gpu)
             else:
                 grad_list,phiinv0_gpu,phiinv1_gpu = self.calculateGradientVt2d(lambda1,t,phiinv0_gpu,phiinv1_gpu)
-            self.updateGradientVt(t,grad_list)
+            
+            if self.params['optimizer'] == 'adam':
+                self.updateAdamLearningRate(t,grad_list)
+            elif self.params['optimizer'] == 'adadelta':
+                self.updateAdadeltaLearningRate(t,grad_list)
+            elif self.params['optimizer'] == 'rmsprop':
+                self.updateRMSPropLearningRate(t,grad_list)
+            elif self.params['optimizer'] == 'sgdm':
+                self.updateSGDMLearningRate(t,grad_list)
+            
+            self.updateGradientVt(t,grad_list,iter=iter)
             del grad_list
         
         del phiinv0_gpu,phiinv1_gpu,phiinv2_gpu
@@ -1388,9 +1762,13 @@ class LDDMM:
         self.lastaffineA = self.affineA.clone()
         self.affineA = torch.mm(self.affineA,e)
     
+    # update epsilon after a run
+    def updateEpsilonAfterRun(self):
+        self.setParams('epsilonL',self.GDBetaAffineR*self.params['epsilonL']) # reduce step size, here we set it to the current size
+        self.setParams('epsilonT',self.GDBetaAffineT*self.params['epsilonT']) # reduce step size, here we set it to the current size
     
     # for section alignment
-    def sa(self, input, atlas, a=None, b=None, theta=None, dx=None, nx=None, niter=250, dim=2,missingslices=[],epsilonxy=0.0000025, epsilontheta=0.00000055,minepsilonxy=float(1e-20),minepsilontheta=2.0*10**-24,sigmaxy = 0.7*10, sigmatheta = np.pi/180*2*10, sigma_atlas = 1.0, sigma_target = 1.0,sigma_target_radius = 30,min_sigma_target = 1.0,sigma_atlas_radius = 34,min_sigma_atlas = 2.,norm=0,smoothing=1):
+    def sa(self, input, atlas, a=None, b=None, theta=None, dx=None, nx=None, niter=250, dim=2,missingslices=[],epsilonxy=0.0000025, epsilontheta=0.00000055,minepsilonxy=float(1e-20),minepsilontheta=2.0*10**-24,sigmaxy = 0.7*10, sigmatheta = np.pi/180*2*10, sigma_atlas = 1.0, sigma_target = 1.0,sigma_target_radius = 30,min_sigma_target = 1.0,sigma_atlas_radius = 34,min_sigma_atlas = 2.,norm=0,smoothing=1,optimizer='gd',beta_1=0.9,beta_2=0.999,epsilon_adam=10e-8,alpha_adam=0.001,sg_mask_mode = 'ones',sg_sigma=25):
         # equivalent of cor_sag_rot
         if dim != 2:
             target = torch.transpose(input,dim, 2).clone()
@@ -1514,6 +1892,23 @@ class LDDMM:
         else:
             scale = 1.0
         
+        # optimizer
+        if optimizer=="adam":
+            best_E = torch.tensor(1e15).type(self.params['dtype']).to(device=self.params['cuda'])
+            m_a = torch.zeros((nx[2],)).type(self.params['dtype']).to(device=self.params['cuda'])
+            m_b = torch.zeros((nx[2],)).type(self.params['dtype']).to(device=self.params['cuda'])
+            m_theta = torch.zeros((nx[2],)).type(self.params['dtype']).to(device=self.params['cuda'])
+            v_a = torch.zeros((nx[2],)).type(self.params['dtype']).to(device=self.params['cuda'])
+            v_b = torch.zeros((nx[2],)).type(self.params['dtype']).to(device=self.params['cuda'])
+            v_theta = torch.zeros((nx[2],)).type(self.params['dtype']).to(device=self.params['cuda'])
+            meshind_x = torch.linspace(0,target_rem.shape[0]-1,target_rem.shape[0]).type(self.params['dtype']).to(device=self.params['cuda'])
+            meshind_y = torch.linspace(0,target_rem.shape[1]-1,target_rem.shape[1]).type(self.params['dtype']).to(device=self.params['cuda'])
+            meshX,meshY = torch.meshgrid(meshind_x,meshind_y)
+
+        
+        # sgd mask
+        M = torch.ones(target_rem.shape).type(self.params['dtype']).to(device=self.params['cuda'])
+        
         # loop
         iter = 1
         E = torch.tensor(1e15).type(self.params['dtype']).to(device=self.params['cuda'])
@@ -1557,6 +1952,28 @@ class LDDMM:
                 + (torch.reshape( mynumerator[0,:] / ( (torch.roll(slicecoord,-2) - slicecoord) * (torch.roll(slicecoord,-2) - torch.roll(slicecoord,1)) * (torch.roll(slicecoord,-2) - torch.roll(slicecoord,2)) * (torch.roll(slicecoord,-2) - torch.roll(slicecoord,-1)) ), [1,1,slicecoord.shape[0]]).expand( [target_rem.shape[0],target_rem.shape[1],-1] ) * torch.roll(torch.nn.functional.pad(target_rem,(2,2),'constant',0),-2,dims=2))[:,:,2:-2] \
                 + (torch.reshape( mynumerator[2,:] / ( (slicecoord - torch.roll(slicecoord,1)) * (slicecoord - torch.roll(slicecoord,2)) * (slicecoord - torch.roll(slicecoord,-1)) * (slicecoord - torch.roll(slicecoord,-2)) ), [1,1,slicecoord.shape[0]]).expand( [target_rem.shape[0],target_rem.shape[1],-1] ) * torch.nn.functional.pad(target_rem,(2,2),'constant',0) )[:,:,2:-2]
             
+            # update sgd mask
+            if optimizer=="adam" and sg_mask_mode=="gauss":
+                center_x = (torch.rand(1)*target_rem.shape[0]).type(self.params['dtype']).to(device=self.params['cuda'])
+                center_y = (torch.rand(1)*target_rem.shape[1]).type(self.params['dtype']).to(device=self.params['cuda'])
+                M = mygaussian_torch_selectcenter_meshgrid(meshX,meshY,sg_sigma,center_x,center_y)
+                # normalize mask
+                #M = M / (1/(2*sg_sigma**2))
+                # make mask 3d
+                M = M.unsqueeze(2).expand(-1,-1,target_rem.shape[2])
+                #print(torch.max(M))
+            elif optimizer=="adam" and sg_mask_mode=="2gauss":
+                M = mygaussian_torch_selectcenter_meshgrid(meshX,meshY,sg_sigma,(torch.rand(1)*target_rem.shape[0]).type(self.params['dtype']).to(device=self.params['cuda']),(torch.rand(1)*target_rem.shape[1]).type(self.params['dtype']).to(device=self.params['cuda'])) + mygaussian_torch_selectcenter_meshgrid(meshX,meshY,sg_sigma,(torch.rand(1)*target_rem.shape[0]).type(self.params['dtype']).to(device=self.params['cuda']),(torch.rand(1)*target_rem.shape[1]).type(self.params['dtype']).to(device=self.params['cuda']))
+                M = M.unsqueeze(2).expand(-1,-1,target_rem.shape[2])
+            elif optimizer=="adam" and sg_mask_mode=="i2gauss":
+                for i in range(M.shape[2]):
+                    M[:,:,i] =  mygaussian_torch_selectcenter_meshgrid(meshX,meshY,sg_sigma,(torch.rand(1)*target_rem.shape[0]).type(self.params['dtype']).to(device=self.params['cuda']),(torch.rand(1)*target_rem.shape[1]).type(self.params['dtype']).to(device=self.params['cuda'])) + mygaussian_torch_selectcenter_meshgrid(meshX,meshY,sg_sigma,(torch.rand(1)*target_rem.shape[0]).type(self.params['dtype']).to(device=self.params['cuda']),(torch.rand(1)*target_rem.shape[1]).type(self.params['dtype']).to(device=self.params['cuda']))
+            elif optimizer=="adam" and sg_mask_mode=="igauss":
+                for i in range(M.shape[2]):
+                    M[:,:,i] = mygaussian_torch_selectcenter_meshgrid(meshX,meshY,sg_sigma,(torch.rand(1)*target_rem.shape[0]).type(self.params['dtype']).to(device=self.params['cuda']),(torch.rand(1)*target_rem.shape[1]).type(self.params['dtype']).to(device=self.params['cuda']))
+            elif optimizer=="adam" and sg_mask_mode=="rand":
+                M = torch.rand(M.shape)
+            
             # compute energies
             last_E = E.clone()
             Eimtarget = torch.sum(1.0 / torch.squeeze(sigma_target_vec)**2 * torch.squeeze(torch.sum(torch.sum(-LZTI * target_rem,dim=0),dim=0)) ) * np.prod(dx)/2.0
@@ -1567,24 +1984,30 @@ class LDDMM:
             
             # adjust optimization parameters
             # locked to gdr for now
-            if E < last_E and iter > 1:
-                if np.mod(iter,2) == 0:
-                    epsilonxy *= 1.04
-                else:
-                    epsilontheta *= 1.04
-            
-            if E > last_E and iter > 1:
-                if np.mod(iter,2) == 0:
-                    epsilonxy = epsilonxy/1.5
-                    #print('reducing epsilonxy to ' + str(epsilonxy))
-                    if epsilonxy < minepsilonxy and epsilontheta < minepsilontheta:
-                        break
-                else:
-                    epsilontheta = epsilontheta/1.5
-                    #print('reducing epsilontheta to ' + str(epsilontheta))
-                    if epsilontheta < minepsilontheta and epsilontheta < minepsilontheta:
-                        break
-            
+            if optimizer == "gd":
+                if E < last_E and iter > 1:
+                    if np.mod(iter,2) == 0:
+                        epsilonxy *= 1.04
+                    else:
+                        epsilontheta *= 1.04
+                
+                if E > last_E and iter > 1:
+                    if np.mod(iter,2) == 0:
+                        epsilonxy = epsilonxy/1.5
+                        #print('reducing epsilonxy to ' + str(epsilonxy))
+                        if epsilonxy < minepsilonxy and epsilontheta < minepsilontheta:
+                            break
+                    else:
+                        epsilontheta = epsilontheta/1.5
+                        #print('reducing epsilontheta to ' + str(epsilontheta))
+                        if epsilontheta < minepsilontheta and epsilontheta < minepsilontheta:
+                            break
+            elif optimizer=="adam":
+                if E < best_E:
+                    best_E = E.clone()
+                    best_a = a.clone()
+                    best_b = b.clone()
+                    best_theta = theta.clone()
             
             # print energies
             if iter > 1:
@@ -1599,8 +2022,8 @@ class LDDMM:
             
             # compute gradients
             if np.mod(iter,2) == 1:
-                gradx = 1/sigma_target_vec**2 * torch.squeeze(torch.sum(torch.sum(-2*LZTI*DXTI,dim=0),dim=0) * dx[0] * dx[1])
-                grady = 1/sigma_target_vec**2 * torch.squeeze(torch.sum(torch.sum(-2*LZTI*DYTI,dim=0),dim=0) * dx[0] * dx[1])
+                gradx = 1/sigma_target_vec**2 * torch.squeeze(torch.sum(torch.sum(-2*M*LZTI*DXTI,dim=0),dim=0) * dx[0] * dx[1])
+                grady = 1/sigma_target_vec**2 * torch.squeeze(torch.sum(torch.sum(-2*M*LZTI*DYTI,dim=0),dim=0) * dx[0] * dx[1])
             
             #diffatlas = torch.zeros(DXTI.shape)
             diffatlas = target_rem - template[:,:,slicenumbers]
@@ -1609,27 +2032,46 @@ class LDDMM:
             #    diffatlas[:,:,i] = torch.zeros((nx[0],nx[1],1))
             
             if np.mod(iter,2) == 1:
-                gradx = gradx + 1/sigma_atlas_vec**2 * torch.squeeze(torch.sum(torch.sum(2*DXTI*diffatlas,dim=0),dim=0) * dx[0] * dx[1])
-                grady = grady + 1/sigma_atlas_vec**2 * torch.squeeze(torch.sum(torch.sum(2*DYTI*diffatlas,dim=0),dim=0) * dx[0] * dx[1])
+                gradx = gradx + 1/sigma_atlas_vec**2 * torch.squeeze(torch.sum(torch.sum(2*M*DXTI*diffatlas,dim=0),dim=0) * dx[0] * dx[1])
+                grady = grady + 1/sigma_atlas_vec**2 * torch.squeeze(torch.sum(torch.sum(2*M*DYTI*diffatlas,dim=0),dim=0) * dx[0] * dx[1])
                 gradx += torch.squeeze(a[slicenumbers])/sigmaxy**2
                 grady += torch.squeeze(b[slicenumbers])/sigmaxy**2
             
             if np.mod(iter,2) == 0:
-                gradtheta = 1/sigma_target_vec**2 * torch.squeeze(torch.sum(torch.sum( -2*LZTI*(DXTI*-1*X[:,:,slicenumbers] + DYTI*Y[:,:,slicenumbers]),dim=0),dim=0) * dx[0] * dx[1])
-                gradtheta = gradtheta + 1/sigma_atlas_vec**2 * torch.squeeze(torch.sum(torch.sum( 2* (DXTI*-1*X[:,:,slicenumbers] + DYTI*Y[:,:,slicenumbers]) * diffatlas,dim=0),dim=0) * dx[0] * dx[1])
+                gradtheta = 1/sigma_target_vec**2 * torch.squeeze(torch.sum(torch.sum( -2*M*LZTI*(DXTI*-1*X[:,:,slicenumbers] + DYTI*Y[:,:,slicenumbers]),dim=0),dim=0) * dx[0] * dx[1])
+                gradtheta = gradtheta + 1/sigma_atlas_vec**2 * torch.squeeze(torch.sum(torch.sum( 2*M* (DXTI*-1*X[:,:,slicenumbers] + DYTI*Y[:,:,slicenumbers]) * diffatlas,dim=0),dim=0) * dx[0] * dx[1])
                 gradtheta += torch.squeeze(theta[slicenumbers])/sigmatheta**2
             
             # update parameters
             # don't need to calculate gradtheta and gradxy every iteration
+            #TODO: separate normalization into update step only
             if np.mod(iter,2) == 1:
-                a[slicenumbers] = a[slicenumbers]-epsilonxy*gradx
-                b[slicenumbers] = b[slicenumbers]-epsilonxy*grady
+                if optimizer=="gd":
+                    a[slicenumbers] = a[slicenumbers]-epsilonxy*gradx
+                    b[slicenumbers] = b[slicenumbers]-epsilonxy*grady
+                elif optimizer=="adam":
+                    m_a[slicenumbers] = (beta_1*m_a[slicenumbers] + (1-beta_1)*gradx) / (1-beta_1**(iter+1))
+                    m_b[slicenumbers] = (beta_1*m_b[slicenumbers] + (1-beta_1)*grady) / (1-beta_1**(iter+1))
+                    v_a[slicenumbers] = (beta_2*v_a[slicenumbers] + (1-beta_2)*(gradx**2)) / (1-beta_2**(iter+1))
+                    v_b[slicenumbers] = (beta_2*v_b[slicenumbers] + (1-beta_2)*(grady**2)) / (1-beta_2**(iter+1))
+                    a[slicenumbers] = a[slicenumbers] - alpha_adam * m_a[slicenumbers] / (torch.sqrt(v_a[slicenumbers]) + epsilon_adam)
+                    b[slicenumbers] = b[slicenumbers] - alpha_adam * m_b[slicenumbers] / (torch.sqrt(v_b[slicenumbers]) + epsilon_adam)
             else:
-                theta[slicenumbers] = theta[slicenumbers]-epsilontheta*gradtheta
+                if optimizer=="gd":
+                    theta[slicenumbers] = theta[slicenumbers]-epsilontheta*gradtheta
+                elif optimizer=="adam":
+                    m_theta[slicenumbers] = (beta_1*m_theta[slicenumbers] + (1-beta_1)*gradtheta) / (1-beta_1**(iter+1))
+                    v_theta[slicenumbers] = (beta_2*v_theta[slicenumbers] + (1-beta_2)*(gradtheta**2)) / (1-beta_2**(iter+1))
+                    theta[slicenumbers] = theta[slicenumbers] - alpha_adam * m_theta[slicenumbers] / (torch.sqrt(v_theta[slicenumbers]) + epsilon_adam)
             
             iter += 1
         
-        return a, b, theta, target*scale, epsilonxy, epsilontheta
+        if optimizer != "adam":
+            best_a = a.clone()
+            best_b = b.clone()
+            best_theta = theta.clone()
+        
+        return best_a, best_b, best_theta, target*scale, epsilonxy, epsilontheta
     
     # apply stack alignment transform
     def applySA(self, input, a, b, theta, dx=None, nx=None, dim=2):
@@ -1732,6 +2174,9 @@ class LDDMM:
                 else:
                     ER = torch.tensor(0.0).type(self.params['dtype'])
                 
+                if self.params['optimizer'] == 'sgd' or self.params['optimizer'] == 'adam' or self.params['optimizer'] == 'rmsprop':
+                    self.updateSGDMask()
+                
                 lambda1,EM = self.calculateMatchingEnergyMSE()
             
             # save variables
@@ -1799,7 +2244,7 @@ class LDDMM:
             
             # calculate and update gradients
             if self.params['do_lddmm'] == 1:
-                self.calculateAndUpdateGradientsVt(lambda1)
+                self.calculateAndUpdateGradientsVt(lambda1,iter=it)
             
             del lambda1
             
@@ -2090,6 +2535,11 @@ class LDDMM:
         
         # main loop
         self.registration()
+        
+        # update epsilon
+        if self.params['update_epsilon'] == 1:
+            self.updateEpsilonAfterRun()
+        
         # save outputs
         self.saveOutputs(save_template=save_template)
         

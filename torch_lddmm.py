@@ -1960,7 +1960,7 @@ class LDDMM:
         return grad_list,phiinv0_gpu,phiinv1_gpu,phiinv2_gpu
     
     # compute gradient per time step for time varying velocity field parameterization
-    def calculateGradientVt2d(self,lambda1,t,phiinv0_gpu,phiinv1_gpu,phiinv2_gpu):
+    def calculateGradientVt2d(self,lambda1,t,phiinv0_gpu,phiinv1_gpu):
         # update phiinv using method of characteristics, note "+" because we are integrating backward
         phiinv0_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv0_gpu-self.X0).unsqueeze(0).unsqueeze(0),torch.stack(((self.X1+self.vt1[t]*self.dt)/(self.nx[1]*self.dx[1]-self.dx[1])*2,(self.X0+self.vt0[t]*self.dt)/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=2).unsqueeze(0),padding_mode='border')) + (self.X0+self.vt0[t]*self.dt)
         phiinv1_gpu = torch.squeeze(torch.nn.functional.grid_sample((phiinv1_gpu-self.X1).unsqueeze(0).unsqueeze(0),torch.stack(((self.X1+self.vt1[t]*self.dt)/(self.nx[1]*self.dx[1]-self.dx[1])*2,(self.X0+self.vt0[t]*self.dt)/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=2).unsqueeze(0),padding_mode='border')) + (self.X1+self.vt1[t]*self.dt)
@@ -2633,7 +2633,7 @@ class LDDMM:
                     self.computeWeightEstimation()
                 
                 if self.params['do_lddmm'] == 1:
-                    ER = self.calculateRegularizationEnergyVt()
+                    ER = self.calculateRegularizationEnergyVt2d()
                 else:
                     ER = torch.tensor(0.0).type(self.params['dtype'])
                 

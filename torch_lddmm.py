@@ -729,6 +729,18 @@ class LDDMM:
                 self.ccVarI.append(1.0)
                 self.ccCovIJ.append(1.0)
         
+        # contrast correction variables
+        if not hasattr(self,'ccCoeff') or self.initializer_flags['cc'] == 1: # we never reset cc variables
+            self.ccIbar = []
+            self.ccJbar = []
+            self.ccVarI = []
+            self.ccCovIJ = []
+            for i in range(len(self.I)):
+                self.ccIbar.append(0.0)
+                self.ccJbar.append(0.0)
+                self.ccVarI.append(1.0)
+                self.ccCovIJ.append(1.0)
+        
         # weight estimation variables
         if self.initializer_flags['we'] == 1: # if number of channels changed, reset everything
             self.W = [[] for i in range(len(self.I))]
@@ -1415,6 +1427,10 @@ class LDDMM:
         
         return
     
+    def applyContrastCorrection(self,I,i):
+        #return [ ((x - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) for i,x in enumerate(I)]
+        return ((I - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i])
+    
     # compute weight estimation
     def computeWeightEstimation(self):
         for ii in range(self.params['we']):
@@ -1422,9 +1438,9 @@ class LDDMM:
                 if i in self.params['we_channels']:
                     if ii == 0:
                         if self.params['low_memory'] == 0:
-                            self.W[i][ii] = 1.0/np.sqrt(2.0*np.pi*self.params['sigma'][i]**2) * torch.exp(-1.0/2.0/self.params['sigma'][i]**2 * (((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2)
+                            self.W[i][ii] = 1.0/np.sqrt(2.0*np.pi*self.params['sigma'][i]**2) * torch.exp(-1.0/2.0/self.params['sigma'][i]**2 * (self.applyContrastCorrection(self.It[i][-1],i) - self.J[i])**2)
                         else:
-                            self.W[i][ii] = 1.0/np.sqrt(2.0*np.pi*self.params['sigma'][i]**2) * torch.exp(-1.0/2.0/self.params['sigma'][i]**2 * (((self.applyThisTransformNT(self.I[i],nt=self.params['nt']) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2)
+                            self.W[i][ii] = 1.0/np.sqrt(2.0*np.pi*self.params['sigma'][i]**2) * torch.exp(-1.0/2.0/self.params['sigma'][i]**2 * (self.applyContrastCorrection(self.applyThisTransformNT(self.I[i],nt=self.params['nt']),i) - self.J[i])**2)
                     else:
                         self.W[i][ii] = 1.0/np.sqrt(2.0*np.pi*self.params['sigmaW'][ii]**2) * torch.exp(-1.0/2.0/self.params['sigmaW'][ii]**2 * (self.we_C[i][ii] - self.J[i])**2)
         
@@ -1474,11 +1490,11 @@ class LDDMM:
         if self.params['we'] == 0:
             for i in range(len(self.I)):
                 if self.params['low_memory'] == 0:
-                    lambda1[i] = -1*self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])/self.params['sigma'][i]**2 # may not need to store this
-                    EM += torch.sum(self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
+                    lambda1[i] = -1*self.M*( self.applyContrastCorrection(self.It[i][-1],i) - self.J[i])/self.params['sigma'][i]**2 # may not need to store this
+                    EM += torch.sum(self.M*( self.applyContrastCorrection(self.It[i][-1],i) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
                 else:
-                    lambda1[i] = -1*self.M*( ((self.applyThisTransformNT(self.I[i]) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])/self.params['sigma'][i]**2 # may not need to store this
-                    EM += torch.sum(self.M*( ((self.applyThisTransformNT(self.I[i]) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
+                    lambda1[i] = -1*self.M*( self.applyContrastCorrection(self.applyThisTransformNT(self.I[i]),i) - self.J[i])/self.params['sigma'][i]**2 # may not need to store this
+                    EM += torch.sum(self.M*( self.applyContrastCorrection(self.applyThisTransformNT(self.I[i]),i) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
                 
                 if self.params['optimizer'] == 'sgd':
                     lambda1[i] *= self.sgd_M
@@ -1488,11 +1504,11 @@ class LDDMM:
                     for ii in range(self.params['we']):
                         if ii == 0:
                             if self.params['low_memory'] == 0:
-                                lambda1[i] = -1*self.W[i][ii]*self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])/self.params['sigma'][i]**2
-                                EM += torch.sum(self.W[i][ii]*self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
+                                lambda1[i] = -1*self.W[i][ii]*self.M*( self.applyContrastCorrection(self.It[i][-1],i) - self.J[i])/self.params['sigma'][i]**2
+                                EM += torch.sum(self.W[i][ii]*self.M*( self.applyContrastCorrection(self.It[i][-1],i) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
                             else:
-                                lambda1[i] = -1*self.W[i][ii]*self.M*( ((self.applyThisTransformNT(self.I[i]) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])/self.params['sigma'][i]**2
-                                EM += torch.sum(self.W[i][ii]*self.M*( ((self.applyThisTransformNT(self.I[i]) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
+                                lambda1[i] = -1*self.W[i][ii]*self.M*( self.applyContrastCorrection(self.applyThisTransformNT(self.I[i]),i) - self.J[i])/self.params['sigma'][i]**2
+                                EM += torch.sum(self.W[i][ii]*self.M*( self.applyContrastCorrection(self.applyThisTransformNT(self.I[i]),i) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
                             
                             if self.params['optimizer'] == 'sgd':
                                 lambda1[i] *= self.sgd_M
@@ -1500,11 +1516,11 @@ class LDDMM:
                             EM += torch.sum(self.W[i][ii]*self.M*( self.we_C[i][ii] - self.J[i])**2/(2.0*self.params['sigmaW'][ii]**2))*self.dx[0]*self.dx[1]*self.dx[2]
                 else:
                     if self.params['low_memory'] == 0:
-                        lambda1[i] = -1*self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])/self.params['sigma'][i]**2 # may not need to store this
-                        EM += torch.sum(self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
+                        lambda1[i] = -1*self.M*( self.applyContrastCorrection(self.It[i][-1],i) - self.J[i])/self.params['sigma'][i]**2 # may not need to store this
+                        EM += torch.sum(self.M*( self.applyContrastCorrection(self.It[i][-1],i) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
                     else:
-                        lambda1[i] = -1*self.M*( ((self.applyThisTransformNT(self.I[i]) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])/self.params['sigma'][i]**2 # may not need to store this
-                        EM += torch.sum(self.M*( ((self.applyThisTransformNT(self.I[i]) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
+                        lambda1[i] = -1*self.M*( self.applyContrastCorrection(self.applyThisTransformNT(self.I[i]),i) - self.J[i])/self.params['sigma'][i]**2 # may not need to store this
+                        EM += torch.sum(self.M*( self.applyContrastCorrection(self.applyThisTransformNT(self.I[i]),i) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
                     
                     if self.params['optimizer'] == 'sgd':
                         lambda1[i] *= self.sgd_M
@@ -1518,11 +1534,11 @@ class LDDMM:
         if self.params['we'] == 0:
             for i in range(len(self.I)):
                 if self.params['low_memory'] == 0:
-                    lambda1[i] = -1*self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])/self.params['sigma'][i]**2 # may not need to store this
-                    EM += torch.sum(self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]
+                    lambda1[i] = -1*self.M*( self.applyContrastCorrection(self.It[i][-1],i) - self.J[i])/self.params['sigma'][i]**2 # may not need to store this
+                    EM += torch.sum(self.M*( self.applyContrastCorrection(self.It[i][-1],i) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]
                 else:
-                    lambda1[i] = -1*self.M*( ((self.applyThisTransformNT(self.I[i]) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])/self.params['sigma'][i]**2 # may not need to store this
-                    EM += torch.sum(self.M*( ((self.applyThisTransformNT(self.I[i]) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]
+                    lambda1[i] = -1*self.M*( self.applyContrastCorrection(self.applyThisTransformNT(self.I[i]),i) - self.J[i])/self.params['sigma'][i]**2 # may not need to store this
+                    EM += torch.sum(self.M*( self.applyContrastCorrection(self.applyThisTransformNT(self.I[i]),i) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]
                 
                 if self.params['optimizer'] == 'sgd':
                     lambda1[i] *= self.sgd_M
@@ -1532,11 +1548,11 @@ class LDDMM:
                     for ii in range(self.params['we']):
                         if ii == 0:
                             if self.params['low_memory'] == 0:
-                                lambda1[i] = -1*self.W[i][ii]*self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])/self.params['sigma'][i]**2
-                                EM += torch.sum(self.W[i][ii]*self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]
+                                lambda1[i] = -1*self.W[i][ii]*self.M*( self.applyContrastCorrection(self.It[i][-1],i) - self.J[i])/self.params['sigma'][i]**2
+                                EM += torch.sum(self.W[i][ii]*self.M*( self.applyContrastCorrection(self.It[i][-1],i) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]
                             else:
-                                lambda1[i] = -1*self.W[i][ii]*self.M*( ((self.applyThisTransformNT(self.I[i]) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])/self.params['sigma'][i]**2
-                                EM += torch.sum(self.W[i][ii]*self.M*( ((self.applyThisTransformNT(self.I[i]) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]
+                                lambda1[i] = -1*self.W[i][ii]*self.M*( self.applyContrastCorrection(self.applyThisTransformNT(self.I[i]),i) - self.J[i])/self.params['sigma'][i]**2
+                                EM += torch.sum(self.W[i][ii]*self.M*( self.applyContrastCorrection(self.applyThisTransformNT(self.I[i]),i) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]
                             
                             if self.params['optimizer'] == 'sgd':
                                 lambda1[i] *= self.sgd_M
@@ -1544,11 +1560,11 @@ class LDDMM:
                             EM += torch.sum(self.W[i][ii]*self.M*( self.we_C[i][ii] - self.J[i])**2/(2.0*self.params['sigmaW'][ii]**2))*self.dx[0]*self.dx[1]
                 else:
                     if self.params['low_memory'] == 0:
-                        lambda1[i] = -1*self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])/self.params['sigma'][i]**2 # may not need to store this
-                        EM += torch.sum(self.M*( ((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]
+                        lambda1[i] = -1*self.M*( self.applyContrastCorrection(self.It[i][-1],i) - self.J[i])/self.params['sigma'][i]**2 # may not need to store this
+                        EM += torch.sum(self.M*( self.applyContrastCorrection(self.It[i][-1],i) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]
                     else:
-                        lambda1[i] = -1*self.M*( ((self.applyThisTransformNT(self.I[i]) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])/self.params['sigma'][i]**2 # may not need to store this
-                        EM += torch.sum(self.M*( ((self.applyThisTransformNT(self.I[i]) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]
+                        lambda1[i] = -1*self.M*( self.applyContrastCorrection(self.applyThisTransformNT(self.I[i]),i) - self.J[i])/self.params['sigma'][i]**2 # may not need to store this
+                        EM += torch.sum(self.M*( self.applyContrastCorrection(self.applyThisTransformNT(self.I[i]),i) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]
                     
                     if self.params['optimizer'] == 'sgd':
                         lambda1[i] *= self.sgd_M
@@ -1571,17 +1587,17 @@ class LDDMM:
         EM = 0
         if self.params['we'] == 0:
             for i in range(len(self.I)):
-                EM += torch.sum(self.M*( ((I[i] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
+                EM += torch.sum(self.M*( self.applyContrastCorrection(I[i],i) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
         else:
             for i in range(len(self.I)):
                 if i in self.params['we_channels']:
                     for ii in range(self.params['we']):
                         if ii == 0:
-                            EM += torch.sum(self.W[i][ii]*self.M*( ((I[i] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
+                            EM += torch.sum(self.W[i][ii]*self.M*( self.applyContrastCorrection(I[i],i) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
                         else:
                             EM += torch.sum(self.W[i][ii]*self.M*( self.we_C[i][ii] - self.J[i])**2/(2.0*self.params['sigmaW'][ii]**2))*self.dx[0]*self.dx[1]*self.dx[2]
                 else:
-                    EM += torch.sum(self.M*( ((I[i] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
+                    EM += torch.sum(self.M*( self.applyContrastCorrection(I[i],i) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]*self.dx[2]
             
         return EM
     
@@ -1590,17 +1606,17 @@ class LDDMM:
         EM = 0
         if self.params['we'] == 0:
             for i in range(len(self.I)):
-                EM += torch.sum(self.M*( ((I[i] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]
+                EM += torch.sum(self.M*( self.applyContrastCorrection(I[i],i) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]
         else:
             for i in range(len(self.I)):
                 if i in self.params['we_channels']:
                     for ii in range(self.params['we']):
                         if ii == 0:
-                            EM += torch.sum(self.W[i][ii]*self.M*( ((I[i] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]
+                            EM += torch.sum(self.W[i][ii]*self.M*( self.applyContrastCorrection(I[i],i) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]
                         else:
                             EM += torch.sum(self.W[i][ii]*self.M*( self.we_C[i][ii] - self.J[i])**2/(2.0*self.params['sigmaW'][ii]**2))*self.dx[0]*self.dx[1]
                 else:
-                    EM += torch.sum(self.M*( ((I[i] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]
+                    EM += torch.sum(self.M*( self.applyContrastCorrection(I[i],i) - self.J[i])**2/(2.0*self.params['sigma'][i]**2))*self.dx[0]*self.dx[1]
             
         return EM
     
@@ -1773,14 +1789,14 @@ class LDDMM:
         for i in range(len(self.I)):
             if self.params['low_memory'] == 0:
                 if self.params['v_scale'] != 1.0:
-                    gi_x[i],gi_y[i],gi_z[i] = self.torch_gradient(torch.squeeze(torch.nn.functional.interpolate(((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]).unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))
+                    gi_x[i],gi_y[i],gi_z[i] = self.torch_gradient(torch.squeeze(torch.nn.functional.interpolate(self.applyContrastCorrection(self.It[i][-1],i).unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))
                 else:
-                    gi_x[i],gi_y[i],gi_z[i] = self.torch_gradient(((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]),self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)
+                    gi_x[i],gi_y[i],gi_z[i] = self.torch_gradient(self.applyContrastCorrection(self.It[i][-1],i),self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)
             else:
                 if self.params['v_scale'] != 1.0:
-                    gi_x[i],gi_y[i],gi_z[i] = self.torch_gradient(torch.squeeze(torch.nn.functional.interpolate(((self.applyThisTransformNT(self.I[i]) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]).unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))
+                    gi_x[i],gi_y[i],gi_z[i] = self.torch_gradient(torch.squeeze(torch.nn.functional.interpolate(self.applyContrastCorrection(self.applyThisTransformNT(self.I[i]),i).unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))
                 else:
-                    gi_x[i],gi_y[i],gi_z[i] = self.torch_gradient(((self.applyThisTransformNT(self.I[i]) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]),self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)
+                    gi_x[i],gi_y[i],gi_z[i] = self.torch_gradient(self.applyContrastCorrection(self.applyThisTransformNT(self.I[i]),i),self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)
             # TODO: can this be efficiently vectorized?
             for r in range(3):
                 for c in range(4):
@@ -1824,14 +1840,14 @@ class LDDMM:
         for i in range(len(self.I)):
             if self.params['low_memory'] == 0:
                 if self.params['v_scale'] != 1.0:
-                    gi_x[i],gi_y[i] = self.torch_gradient2d(torch.squeeze(torch.nn.functional.interpolate(((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]).unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),self.dx[0],self.dx[1],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)))
+                    gi_x[i],gi_y[i] = self.torch_gradient2d(torch.squeeze(torch.nn.functional.interpolate(self.applyContrastCorrection(self.It[i][-1],i).unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),self.dx[0],self.dx[1],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)))
                 else:
-                    gi_x[i],gi_y[i] = self.torch_gradient2d(((self.It[i][-1] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]),self.dx[0],self.dx[1],self.grad_divisor_x,self.grad_divisor_y)
+                    gi_x[i],gi_y[i] = self.torch_gradient2d(self.applyContrastCorrection(self.It[i][-1],i),self.dx[0],self.dx[1],self.grad_divisor_x,self.grad_divisor_y)
             else:
                 if self.params['v_scale'] != 1.0:
-                    gi_x[i],gi_y[i] = self.torch_gradient2d(torch.squeeze(torch.nn.functional.interpolate(((self.applyThisTransformNT(self.I[i]) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]).unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),self.dx[0],self.dx[1],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)))
+                    gi_x[i],gi_y[i] = self.torch_gradient2d(torch.squeeze(torch.nn.functional.interpolate(self.applyContrastCorrection(self.applyThisTransformNT(self.I[i]),i).unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),self.dx[0],self.dx[1],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)))
                 else:
-                    gi_x[i],gi_y[i] = self.torch_gradient2d(((self.applyThisTransformNT(self.I[i]) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]),self.dx[0],self.dx[1],self.grad_divisor_x,self.grad_divisor_y)
+                    gi_x[i],gi_y[i] = self.torch_gradient2d(self.applyContrastCorrection(self.applyThisTransformNT(self.I[i]),i),self.dx[0],self.dx[1],self.grad_divisor_x,self.grad_divisor_y)
             # TODO: can this be efficiently vectorized?
             for r in range(2):
                 for c in range(3):
@@ -1915,36 +1931,36 @@ class LDDMM:
                     if self.params['v_scale'] != 1.0:
                         if self.params['v_scale_smoothing'] == 1:
                             #TODO: alternatively, compute image gradient and then downsample after
-                            grad_list = [x*lambdat for x in self.torch_gradient(torch.squeeze(torch.nn.functional.interpolate(torch.nn.functional.conv3d(((self.It[i][t] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]).unsqueeze(0).unsqueeze(0),self.gaussian_filter.unsqueeze(0).unsqueeze(0), stride=1, padding = int(self.gaussian_filter.shape[0]/2.0)),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))]
+                            grad_list = [x*lambdat for x in self.torch_gradient(torch.squeeze(torch.nn.functional.interpolate(torch.nn.functional.conv3d(self.applyContrastCorrection(self.It[i][t],i).unsqueeze(0).unsqueeze(0),self.gaussian_filter.unsqueeze(0).unsqueeze(0), stride=1, padding = int(self.gaussian_filter.shape[0]/2.0)),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))]
                         else:
-                            grad_list = [x*lambdat for x in self.torch_gradient(torch.squeeze(torch.nn.functional.interpolate(((self.It[i][t] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]).unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))]
+                            grad_list = [x*lambdat for x in self.torch_gradient(torch.squeeze(torch.nn.functional.interpolate(self.applyContrastCorrection(self.It[i][t],i).unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))]
                     else:
-                        grad_list = [x*lambdat for x in self.torch_gradient(((self.It[i][t] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]),self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)]
+                        grad_list = [x*lambdat for x in self.torch_gradient(self.applyContrastCorrection(self.It[i][t],i),self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)]
                 else:
                     if self.params['v_scale'] != 1.0:
                         if self.params['v_scale_smoothing'] == 1:
-                            grad_list = [x*lambdat for x in self.torch_gradient(torch.squeeze(torch.nn.functional.interpolate(torch.nn.functional.conv3d(((self.applyThisTransformNT(self.I[i],nt=t) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]).unsqueeze(0).unsqueeze(0),self.gaussian_filter.unsqueeze(0).unsqueeze(0), stride=1, padding = int(self.gaussian_filter.shape[0]/2.0)),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))]
+                            grad_list = [x*lambdat for x in self.torch_gradient(torch.squeeze(torch.nn.functional.interpolate(torch.nn.functional.conv3d(self.applyContrastCorrection(self.applyThisTransformNT(self.I[i],nt=t),i).unsqueeze(0).unsqueeze(0),self.gaussian_filter.unsqueeze(0).unsqueeze(0), stride=1, padding = int(self.gaussian_filter.shape[0]/2.0)),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))]
                         else:
-                            grad_list = [x*lambdat for x in self.torch_gradient(torch.squeeze(torch.nn.functional.interpolate(((self.applyThisTransformNT(self.I[i],nt=t) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]).unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))]
+                            grad_list = [x*lambdat for x in self.torch_gradient(torch.squeeze(torch.nn.functional.interpolate(self.applyContrastCorrection(self.applyThisTransformNT(self.I[i],nt=t),i).unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))]
                     else:
-                        grad_list = [x*lambdat for x in self.torch_gradient(((self.applyThisTransformNT(self.I[i],nt=t) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]),self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)]
+                        grad_list = [x*lambdat for x in self.torch_gradient(self.applyContrastCorrection(self.applyThisTransformNT(self.I[i],nt=t),i),self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)]
             else:
                 if self.params['low_memory'] == 0:
                     if self.params['v_scale'] != 1.0:
                         if self.params['v_scale_smoothing'] == 1:
-                            grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient(torch.squeeze(torch.nn.functional.interpolate(torch.nn.functional.conv3d(((self.It[i][t] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]).unsqueeze(0).unsqueeze(0),self.gaussian_filter.unsqueeze(0).unsqueeze(0), stride=1, padding = int(self.gaussian_filter.shape[0]/2.0)),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))])]
+                            grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient(torch.squeeze(torch.nn.functional.interpolate(torch.nn.functional.conv3d(self.applyContrastCorrection(self.It[i][t],i).unsqueeze(0).unsqueeze(0),self.gaussian_filter.unsqueeze(0).unsqueeze(0), stride=1, padding = int(self.gaussian_filter.shape[0]/2.0)),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))])]
                         else:
-                            grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient(torch.squeeze(torch.nn.functional.interpolate(((self.It[i][t] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]).unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))])]
+                            grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient(torch.squeeze(torch.nn.functional.interpolate(self.applyContrastCorrection(self.It[i][t],i).unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))])]
                     else:
-                        grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient(((self.It[i][t] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]),self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)])]
+                        grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient(self.applyContrastCorrection(self.It[i][t],i),self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)])]
                 else:
                     if self.params['v_scale'] != 1.0:
                         if self.params['v_scale_smoothing'] == 1:
-                            grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient(torch.squeeze(torch.nn.functional.interpolate(torch.nn.functional.conv3d(((self.applyThisTransformNT(self.I[i],nt=t) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]).unsqueeze(0).unsqueeze(0),self.gaussian_filter.unsqueeze(0).unsqueeze(0), stride=1, padding = int(self.gaussian_filter.shape[0]/2.0)),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))])]
+                            grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient(torch.squeeze(torch.nn.functional.interpolate(torch.nn.functional.conv3d(self.applyContrastCorrection(self.applyThisTransformNT(self.I[i],nt=t),i).unsqueeze(0).unsqueeze(0),self.gaussian_filter.unsqueeze(0).unsqueeze(0), stride=1, padding = int(self.gaussian_filter.shape[0]/2.0)),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))])]
                         else:
-                            grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient(torch.squeeze(torch.nn.functional.interpolate(((self.applyThisTransformNT(self.I[i],nt=t) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]).unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))])]
+                            grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient(torch.squeeze(torch.nn.functional.interpolate(self.applyContrastCorrection(self.applyThisTransformNT(self.I[i],nt=t),i).unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),self.dx[0],self.dx[1],self.dx[2],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_z.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1],self.X0.shape[2]),mode='trilinear',align_corners=True)))])]
                     else:
-                        grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient(((self.applyThisTransformNT(self.I[i],nt=t) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]),self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)])]
+                        grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient(self.applyContrastCorrection(self.applyThisTransformNT(self.I[i],nt=t),i),self.dx[0],self.dx[1],self.dx[2],self.grad_divisor_x,self.grad_divisor_y,self.grad_divisor_z)])]
         
         # smooth it
         del lambdat, detjac
@@ -2013,36 +2029,36 @@ class LDDMM:
                     if self.params['v_scale'] != 1.0:
                         if self.params['v_scale_smoothing'] == 1:
                             #TODO: alternatively, compute image gradient and then downsample after
-                            grad_list = [x*lambdat for x in self.torch_gradient2d(torch.squeeze(torch.nn.functional.interpolate(torch.nn.functional.conv2d(((self.It[i][t] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]).unsqueeze(0).unsqueeze(0),self.gaussian_filter.unsqueeze(0).unsqueeze(0), stride=1, padding = int(self.gaussian_filter.shape[0]/2.0)),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),self.dx[0],self.dx[1],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)))]
+                            grad_list = [x*lambdat for x in self.torch_gradient2d(torch.squeeze(torch.nn.functional.interpolate(torch.nn.functional.conv2d(self.applyContrastCorrection(self.It[i][t],i).unsqueeze(0).unsqueeze(0),self.gaussian_filter.unsqueeze(0).unsqueeze(0), stride=1, padding = int(self.gaussian_filter.shape[0]/2.0)),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),self.dx[0],self.dx[1],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)))]
                         else:
-                            grad_list = [x*lambdat for x in self.torch_gradient2d(torch.squeeze(torch.nn.functional.interpolate(((self.It[i][t] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]).unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),self.dx[0],self.dx[1],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)))]
+                            grad_list = [x*lambdat for x in self.torch_gradient2d(torch.squeeze(torch.nn.functional.interpolate(self.applyContrastCorrection(self.It[i][t],i).unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),self.dx[0],self.dx[1],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)))]
                     else:
-                        grad_list = [x*lambdat for x in self.torch_gradient2d(((self.It[i][t] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]),self.dx[0],self.dx[1],self.grad_divisor_x,self.grad_divisor_y)]
+                        grad_list = [x*lambdat for x in self.torch_gradient2d(self.applyContrastCorrection(self.It[i][t],i),self.dx[0],self.dx[1],self.grad_divisor_x,self.grad_divisor_y)]
                 else:
                     if self.params['v_scale'] != 1.0:
                         if self.params['v_scale_smoothing'] == 1:
-                            grad_list = [x*lambdat for x in self.torch_gradient2d(torch.squeeze(torch.nn.functional.interpolate(torch.nn.functional.conv2d(((self.applyThisTransformNT(self.I[i],nt=t) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]).unsqueeze(0).unsqueeze(0),self.gaussian_filter.unsqueeze(0).unsqueeze(0), stride=1, padding = int(self.gaussian_filter.shape[0]/2.0)),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),self.dx[0],self.dx[1],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)))]
+                            grad_list = [x*lambdat for x in self.torch_gradient2d(torch.squeeze(torch.nn.functional.interpolate(torch.nn.functional.conv2d(self.applyContrastCorrection(self.applyThisTransformNT(self.I[i],nt=t),i).unsqueeze(0).unsqueeze(0),self.gaussian_filter.unsqueeze(0).unsqueeze(0), stride=1, padding = int(self.gaussian_filter.shape[0]/2.0)),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),self.dx[0],self.dx[1],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)))]
                         else:
-                            grad_list = [x*lambdat for x in self.torch_gradient2d(torch.squeeze(torch.nn.functional.interpolate(((self.applyThisTransformNT(self.I[i],nt=t) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]).unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),self.dx[0],self.dx[1],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)))]
+                            grad_list = [x*lambdat for x in self.torch_gradient2d(torch.squeeze(torch.nn.functional.interpolate(self.applyContrastCorrection(self.applyThisTransformNT(self.I[i],nt=t),i).unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),self.dx[0],self.dx[1],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)))]
                     else:
-                        grad_list = [x*lambdat for x in self.torch_gradient2d(((self.applyThisTransformNT(self.I[i],nt=t) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]),self.dx[0],self.dx[1],self.grad_divisor_x,self.grad_divisor_y)]
+                        grad_list = [x*lambdat for x in self.torch_gradient2d(self.applyContrastCorrection(self.applyThisTransformNT(self.I[i],nt=t),i),self.dx[0],self.dx[1],self.grad_divisor_x,self.grad_divisor_y)]
             else:
                 if self.params['low_memory'] == 0:
                     if self.params['v_scale'] != 1.0:
                         if self.params['v_scale_smoothing'] == 1:
-                            grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient2d(torch.squeeze(torch.nn.functional.interpolate(torch.nn.functional.conv2d(((self.It[i][t] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]).unsqueeze(0).unsqueeze(0),self.gaussian_filter.unsqueeze(0).unsqueeze(0), stride=1, padding = int(self.gaussian_filter.shape[0]/2.0)),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),self.dx[0],self.dx[1],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)))])]
+                            grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient2d(torch.squeeze(torch.nn.functional.interpolate(torch.nn.functional.conv2d(self.applyContrastCorrection(self.It[i][t],i).unsqueeze(0).unsqueeze(0),self.gaussian_filter.unsqueeze(0).unsqueeze(0), stride=1, padding = int(self.gaussian_filter.shape[0]/2.0)),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),self.dx[0],self.dx[1],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)))])]
                         else:
-                            grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient2d(torch.squeeze(torch.nn.functional.interpolate(((self.It[i][t] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]).unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),self.dx[0],self.dx[1],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)))])]
+                            grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient2d(torch.squeeze(torch.nn.functional.interpolate(self.applyContrastCorrection(self.It[i][t],i).unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),self.dx[0],self.dx[1],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)))])]
                     else:
-                        grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient2d(((self.It[i][t] - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]),self.dx[0],self.dx[1],self.grad_divisor_x,self.grad_divisor_y)])]
+                        grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient2d(self.applyContrastCorrection(self.It[i][t],i),self.dx[0],self.dx[1],self.grad_divisor_x,self.grad_divisor_y)])]
                 else:
                     if self.params['v_scale'] != 1.0:
                         if self.params['v_scale_smoothing'] == 1:
-                            grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient2d(torch.squeeze(torch.nn.functional.interpolate(torch.nn.functional.conv2d(((self.applyThisTransformNT(self.I[i],nt=t) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]).unsqueeze(0).unsqueeze(0),self.gaussian_filter.unsqueeze(0).unsqueeze(0), stride=1, padding = int(self.gaussian_filter.shape[0]/2.0)),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),self.dx[0],self.dx[1],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)))])]
+                            grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient2d(torch.squeeze(torch.nn.functional.interpolate(torch.nn.functional.conv2d(self.applyContrastCorrection(self.applyThisTransformNT(self.I[i],nt=t),i).unsqueeze(0).unsqueeze(0),self.gaussian_filter.unsqueeze(0).unsqueeze(0), stride=1, padding = int(self.gaussian_filter.shape[0]/2.0)),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),self.dx[0],self.dx[1],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)))])]
                         else:
-                            grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient2d(torch.squeeze(torch.nn.functional.interpolate(((self.applyThisTransformNT(self.I[i],nt=t) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]).unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),self.dx[0],self.dx[1],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)))])]
+                            grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient2d(torch.squeeze(torch.nn.functional.interpolate(self.applyContrastCorrection(self.applyThisTransformNT(self.I[i],nt=t),i).unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),self.dx[0],self.dx[1],torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_x.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)),torch.squeeze(torch.nn.functional.interpolate(self.grad_divisor_y.unsqueeze(0).unsqueeze(0),size=(self.X0.shape[0],self.X0.shape[1]),mode='bilinear',align_corners=True)))])]
                     else:
-                        grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient2d(((self.applyThisTransformNT(self.I[i],nt=t) - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]),self.dx[0],self.dx[1],self.grad_divisor_x,self.grad_divisor_y)])]
+                        grad_list = [y + z for (y,z) in zip(grad_list,[x*lambdat for x in self.torch_gradient2d(self.applyContrastCorrection(self.applyThisTransformNT(self.I[i],nt=t),i),self.dx[0],self.dx[1],self.grad_divisor_x,self.grad_divisor_y)])]
         
         # smooth it
         del lambdat, detjac

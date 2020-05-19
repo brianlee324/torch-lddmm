@@ -215,6 +215,7 @@ class LDDMM:
         
         self.initializer_flags = {}
         self.initializer_flags['load'] = 1
+        self.initializer_flags['v_scale'] = 0
         if self.params['do_lddmm'] == 1:
             self.initializer_flags['lddmm'] = 1
         else:
@@ -253,6 +254,9 @@ class LDDMM:
             elif parameter_name == 'we' and parameter_value >= 2 and self.params['we'] != parameter_value or (parameter_name == 'we_channels' and parameter_value != self.params['we_channels']):
                 self.initializer_flags['we'] = 1
                 print('WARNING: Weight estimation state has changed. Variables will be initialized.')
+            elif parameter_name == 'v_scale' and self.params['do_lddmm'] == 1 and hasattr(self,'vt0'):
+                self.initializer_flags['v_scale'] = 1
+                print('WARNING: Parameter sparsity has changed. Variables will be initialized.')
             
             self.params[parameter_name] = parameter_value
         else:
@@ -636,6 +640,12 @@ class LDDMM:
             if not hasattr(self,'EMDiffeo'):
                 self.EMDiffeo = []
         
+        # save X if v_scale changed
+        #if hasattr(self, 'vt0') and self.initializer_flags['v_scale'] == 1:
+        #    old_X0 = self.X0.clone()
+        #    old_X1 = self.X0.clone()
+        #    old_X2 = self.X0.clone()
+        
         # image sampling domain
         x0 = np.linspace(0,self.nx[0]-1,int(np.round(self.nx[0]*self.params['v_scale'])))*self.dx[0]
         x1 = np.linspace(0,self.nx[1]-1,int(np.round(self.nx[1]*self.params['v_scale'])))*self.dx[1]
@@ -710,6 +720,14 @@ class LDDMM:
                                 self.It[ii][i] = self.I[ii][:,:,:].clone().type(self.params['dtype'])
                             else:
                                 self.It[ii][i] = torch.tensor(self.I[ii][:,:,:]).type(self.params['dtype'])
+        
+        # check if v_scale has changed
+        if hasattr(self, 'vt0') and self.initializer_flags['v_scale'] == 1:
+            # resample the current v fields
+            for i in range(self.params['nt']):
+                self.vt0[i] = torch.squeeze(torch.nn.functional.grid_sample((self.vt0[i]).unsqueeze(0).unsqueeze(0),torch.stack(((self.X2)/(self.nx[2]*self.dx[2]-self.dx[2])*2,(self.X1)/(self.nx[1]*self.dx[1]-self.dx[1])*2,(self.X0)/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='border'))
+                self.vt1[i] = torch.squeeze(torch.nn.functional.grid_sample((self.vt1[i]).unsqueeze(0).unsqueeze(0),torch.stack(((self.X2)/(self.nx[2]*self.dx[2]-self.dx[2])*2,(self.X1)/(self.nx[1]*self.dx[1]-self.dx[1])*2,(self.X0)/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='border'))
+                self.vt2[i] = torch.squeeze(torch.nn.functional.grid_sample((self.vt2[i]).unsqueeze(0).unsqueeze(0),torch.stack(((self.X2)/(self.nx[2]*self.dx[2]-self.dx[2])*2,(self.X1)/(self.nx[1]*self.dx[1]-self.dx[1])*2,(self.X0)/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=3).unsqueeze(0),padding_mode='border'))
         
         # affine parameters
         if not hasattr(self,'affineA') and self.initializer_flags['affine'] == 1: # we never automatically reset affine variables
@@ -840,6 +858,7 @@ class LDDMM:
         self.initializer_flags['affine'] = 0
         self.initializer_flags['cc'] = 0
         self.initializer_flags['we'] = 0
+        self.initializer_flags['v_scale'] = 0
     
     
     # initialize lddmm variables
@@ -993,6 +1012,7 @@ class LDDMM:
         self.initializer_flags['affine'] = 0
         self.initializer_flags['cc'] = 0
         self.initializer_flags['we'] = 0
+        self.initializer_flags['v_scale'] = 0
     
     # helper function for torch_gradient
     def _allocateGradientDivisors(self):

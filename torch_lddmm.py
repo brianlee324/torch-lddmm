@@ -40,6 +40,11 @@ def mygaussian_3d_torch_selectcenter_meshgrid(X,Y,Z,sigma=1,center_x=0,center_y=
     #out_mat = out_mat / torch.sum(out_mat)
     return out_mat
 
+def torch_quantile(t,q):
+    k = 1 + round(float(q) * (t.numel() - 1))
+    result = t.view(-1).kthvalue(k)[0]
+    return result
+
 def grid_sample(*args,**kwargs):
     if distutils.version.LooseVersion(torch.__version__) < distutils.version.LooseVersion("1.3.0"):
         return torch.nn.functional.grid_sample(*args,**kwargs)
@@ -564,7 +569,7 @@ class LDDMM:
         #elif Ispacing[0] != Jspacing[0] or Ispacing[1] != Jspacing[1] or Ispacing[2] != Jspacing[2]
         #elif np.sum(Ispacing==Jspacing) < len(I.shape):
         elif self.params['dx'] is None and not all([list(x == Ispacing[0]) for x in Ispacing+Jspacing+Kspacing]):
-            print('ERROR: the image pixel spacings are not the same.\n')
+            print('ERROR: the image pixel spacings are not the same. Set parameter dx to force.\n')
             return -1
         else:
             self.I = I
@@ -741,9 +746,10 @@ class LDDMM:
             self.affineA = torch.tensor(np.eye(4)).type(self.params['dtype']).to(device=self.params['cuda'])
             self.lastaffineA = torch.tensor(np.eye(4)).type(self.params['dtype']).to(device=self.params['cuda'])
             self.gradA = torch.tensor(np.zeros((4,4))).type(self.params['dtype']).to(device=self.params['cuda'])
+
         
-        # contrast correction variables
-        if not hasattr(self,'ccIbar') or self.initializer_flags['cc'] == 1: # we never reset cc variables
+        # linear contrast correction variables
+        if (not hasattr(self,'ccIbar') or self.initializer_flags['cc'] == 1) and self.params['cc'] <= 1: # we never reset cc variables
             self.ccIbar = []
             self.ccJbar = []
             self.ccVarI = []
@@ -754,17 +760,14 @@ class LDDMM:
                 self.ccVarI.append(1.0)
                 self.ccCovIJ.append(1.0)
         
-        # contrast correction variables
-        if not hasattr(self,'ccCoeff') or self.initializer_flags['cc'] == 1: # we never reset cc variables
-            self.ccIbar = []
-            self.ccJbar = []
-            self.ccVarI = []
-            self.ccCovIJ = []
+        # polynomial contrast correction variables
+        if (not hasattr(self,'ccCoeff') or self.initializer_flags['cc'] == 1) and self.params['cc'] > 1: # we never reset cc variables
+            self.ccCoeff = [ [0.0]*(self.params['cc']) for i in range(len(self.I)) ]
             for i in range(len(self.I)):
-                self.ccIbar.append(0.0)
-                self.ccJbar.append(0.0)
-                self.ccVarI.append(1.0)
-                self.ccCovIJ.append(1.0)
+                self.ccCoeff[i][0] = ( (torch_quantile(self.J[i],0.1) + torch_quantile(self.J[i],0.9))/2 - (torch_quantile(self.I[i],0.1) + torch_quantile(self.I[i],0.9))/2 * (torch_quantile(self.J[i],0.9) - torch_quantile(self.J[i],0.1)) / (torch_quantile(self.I[i],0.9) - torch_quantile(self.I[i],0.1)) ) 
+                self.ccCoeff[i][1] = ( (torch_quantile(self.J[i],0.9) - torch_quantile(self.J[i],0.1)) / (torch_quantile(self.I[i],0.9) - torch_quantile(self.I[i],0.1)) )
+                #for ii in range(self.params['cc']-2):
+                #    self.ccCoeff[i].append(0.0)
         
         # weight estimation variables
         if self.initializer_flags['we'] == 1: # if number of channels changed, reset everything
@@ -987,8 +990,8 @@ class LDDMM:
         self.GDBetaAffineR = float(1.0)
         self.GDBetaAffineT = float(1.0)
         
-        # contrast correction variables
-        if not hasattr(self,'ccIbar') or self.initializer_flags['cc'] == 1: # we never reset cc variables
+        # polynomial contrast correction variables
+        if (not hasattr(self,'ccIbar') or self.initializer_flags['cc'] == 1) and self.params['cc'] <= 1: # we never reset cc variables
             self.ccIbar = []
             self.ccJbar = []
             self.ccVarI = []
@@ -998,6 +1001,15 @@ class LDDMM:
                 self.ccJbar.append(0.0)
                 self.ccVarI.append(1.0)
                 self.ccCovIJ.append(1.0)
+        
+        # polynomial contrast correction variables
+        if (not hasattr(self,'ccCoeff') or self.initializer_flags['cc'] == 1) and self.params['cc'] > 1: # we never reset cc variables
+            self.ccCoeff = [ [0.0]*(self.params['cc']) for i in range(len(self.I)) ]
+            for i in range(len(self.I)):
+                self.ccCoeff[i][0] = ( (torch_quantile(self.J[i],0.1) + torch_quantile(self.J[i],0.9))/2 - (torch_quantile(self.I[i],0.1) + torch_quantile(self.I[i],0.9))/2 * (torch_quantile(self.J[i],0.9) - torch_quantile(self.J[i],0.1)) / (torch_quantile(self.I[i],0.9) - torch_quantile(self.I[i],0.1)) ) 
+                self.ccCoeff[i][1] = ( (torch_quantile(self.J[i],0.9) - torch_quantile(self.J[i],0.1)) / (torch_quantile(self.I[i],0.9) - torch_quantile(self.I[i],0.1)) )
+                #for ii in range(self.params['cc']-2):
+                #    self.ccCoeff[i].append(0.0)
         
         # weight estimation variables
         if self.initializer_flags['we'] == 1: # if number of channels changed, reset everything
@@ -1176,7 +1188,7 @@ class LDDMM:
                 phiinv0_gpu = torch.squeeze(grid_sample((phiinv0_gpu-self.X0).unsqueeze(0).unsqueeze(0),torch.stack(((self.X1-self.vt1[t]*self.dt)/(self.nx[1]*self.dx[1]-self.dx[1])*2,(self.X0-self.vt0[t]*self.dt)/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=2).unsqueeze(0),padding_mode='border')) + (self.X0-self.vt0[t]*self.dt)
                 phiinv1_gpu = torch.squeeze(grid_sample((phiinv1_gpu-self.X1).unsqueeze(0).unsqueeze(0),torch.stack(((self.X1-self.vt1[t]*self.dt)/(self.nx[1]*self.dx[1]-self.dx[1])*2,(self.X0-self.vt0[t]*self.dt)/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=2).unsqueeze(0),padding_mode='border')) + (self.X1-self.vt1[t]*self.dt)
             
-            if t == self.params['nt']-1 and (self.params['do_affine'] > 0  or (hasattr(self, 'affineA') and not torch.all(torch.eq(self.affineA,torch.tensor(np.eye(4)).type(self.params['dtype']).to(device=self.params['cuda']))) ) ): # run this if do_affine == 1 or affineA exists and isn't identity
+            if t == self.params['nt']-1 and (self.params['do_affine'] > 0  or (hasattr(self, 'affineA') and not torch.all(torch.eq(self.affineA,torch.tensor(np.eye(3)).type(self.params['dtype']).to(device=self.params['cuda']))) ) ): # run this if do_affine == 1 or affineA exists and isn't identity
                 phiinv0_gpu,phiinv1_gpu = self.forwardDeformationAffineVectorized2d(self.affineA,phiinv0_gpu,phiinv1_gpu)
             
             # deform the image
@@ -1438,8 +1450,23 @@ class LDDMM:
         CovIJ = torch.sum((I-Ibar)*(J-Jbar)*weight*self.M)/torch.sum(weight*self.M)
         return Ibar, Jbar, VarI, CovIJ
     
+    # compute polynomial contrast correction values
+    def computePolynomialContrastTransform(self,I,J,W):
+        D = torch.stack([I.view(-1)**(o) for o in range(self.params['cc'])],dim=1)
+        coeffs = torch.lstsq(torch.matmul(torch.transpose(D,0,1), (J.view(-1,1) * W.view(-1,1))) , torch.matmul(torch.transpose(D,0,1), (D * W.view(-1,1)) ) ).solution
+        return coeffs
+    
     # contrast correction convenience function
     def runContrastCorrection(self):
+        if self.params['cc'] <= 1:
+            self.runContrastCorrectionLinear()
+        else:
+            self.runContrastCorrectionPolynomial()
+            
+        return
+    
+    # contrast correction convenience function
+    def runContrastCorrectionLinear(self):
         for i in self.params['cc_channels']:
             if i in self.params['we_channels'] and self.params['we'] != 0:
                 if self.params['low_memory'] == 0:
@@ -1454,9 +1481,38 @@ class LDDMM:
         
         return
     
-    def applyContrastCorrection(self,I,i):
+    # contrast correction convenience function for polynomial functions
+    def runContrastCorrectionPolynomial(self):
+        for i in self.params['cc_channels']:
+            if i in self.params['we_channels'] and self.params['we'] != 0:
+                if self.params['low_memory'] == 0:
+                    self.ccCoeff[i] = self.computePolynomialContrastTransform(self.It[i][-1], self.J[i],self.W[i][0]*self.M)
+                else:
+                    self.ccCoeff[i] = self.computePolynomialContrastTransform(self.applyThisTransformNT(self.I[i],nt=self.params['nt']), self.J[i],self.W[i][0]*self.M)
+            else:
+                if self.params['low_memory'] == 0:
+                    self.ccCoeff[i] = self.computePolynomialContrastTransform(self.It[i][-1], self.J[i], self.M)
+                else:
+                    self.ccCoeff[i] = self.computePolynomialContrastTransform(self.applyThisTransformNT(self.I[i],nt=self.params['nt']), self.J[i], self.M)
+    
+    
+    # where i is the channels of the image
+    def applyContrastCorrectionLinear(self,I,i):
         #return [ ((x - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) for i,x in enumerate(I)]
         return ((I - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i])
+    
+    def applyContrastCorrectionPoly(self,I,i):
+        ccI = I.clone() * 0
+        for k in range(self.params['cc']):
+            ccI += I**k * self.ccCoeff[i][k]
+        
+        return ccI
+    
+    def applyContrastCorrection(self,I,i):
+        if self.params['cc'] <= 1:
+            return self.applyContrastCorrectionLinear(I,i)
+        else:
+            return self.applyContrastCorrectionPoly(I,i)
     
     # compute weight estimation
     def computeWeightEstimation(self):
@@ -1472,15 +1528,16 @@ class LDDMM:
                         self.W[i][ii] = 1.0/np.sqrt(2.0*np.pi*self.params['sigmaW'][ii]**2) * torch.exp(-1.0/2.0/self.params['sigmaW'][ii]**2 * (self.we_C[i][ii] - self.J[i])**2)
         
         for i in range(len(self.I)):
-            if self.J[0].dim() == 3:
-                Wsum = torch.sum(torch.stack(self.W[i],3),3)
-            elif self.J[0].dim() == 2:
-                Wsum = torch.sum(torch.stack(self.W[i],2),2)
-            
-            for ii in range(self.params['we']):
-                self.W[i][ii] = self.W[i][ii] / Wsum
+            if i in self.params['we_channels']:
+                if self.J[0].dim() == 3:
+                    Wsum = torch.sum(torch.stack(self.W[i],3),3)
+                elif self.J[0].dim() == 2:
+                    Wsum = torch.sum(torch.stack(self.W[i],2),2)
+                
+                for ii in range(self.params['we']):
+                    self.W[i][ii] = self.W[i][ii] / Wsum
         
-        del Wsum
+                del Wsum
         return
     
     # update weight estimation constants
@@ -2670,7 +2727,7 @@ class LDDMM:
                 if self.params['low_memory'] < 1:
                     self.forwardDeformation2d()
                 
-                if self.params['cc'] == 1:
+                if self.params['cc'] >= 1:
                     self.runContrastCorrection()
                 
                 # update weight estimation
@@ -2690,7 +2747,7 @@ class LDDMM:
                 if self.params['low_memory'] < 1:
                     self.forwardDeformation()
                 
-                if self.params['cc'] == 1:
+                if self.params['cc'] >= 1:
                     self.runContrastCorrection()
                 
                 # update weight estimation

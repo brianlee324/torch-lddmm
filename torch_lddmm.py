@@ -1006,11 +1006,11 @@ class LDDMM:
             for i in range(self.params['we']):
                 if i == 0: # first index is the matching channel, the rest is artifacts
                     for ii in self.params['we_channels']: # allocate space only for the desired channels
-                        self.W[ii].append(torch.tensor(0.9*np.ones((self.nx[0],self.nx[1],self.nx[2]))).type(self.params['dtype']).to(device=self.params['cuda']))
+                        self.W[ii].append(torch.tensor(0.9*np.ones((self.nx[0],self.nx[1]))).type(self.params['dtype']).to(device=self.params['cuda']))
                         self.we_C[ii].append(torch.tensor(1.0).type(self.params['dtype']).to(device=self.params['cuda']))
                 else:
                     for ii in self.params['we_channels']:
-                        self.W[ii].append(torch.tensor(0.1*np.ones((self.nx[0],self.nx[1],self.nx[2]))).type(self.params['dtype']).to(device=self.params['cuda']))
+                        self.W[ii].append(torch.tensor(0.1*np.ones((self.nx[0],self.nx[1]))).type(self.params['dtype']).to(device=self.params['cuda']))
                         self.we_C[ii].append(torch.tensor(1.0).type(self.params['dtype']).to(device=self.params['cuda']))
         
         # reset initializer flags

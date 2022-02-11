@@ -40,17 +40,24 @@ def mygaussian_3d_torch_selectcenter_meshgrid(X,Y,Z,sigma=1,center_x=0,center_y=
     #out_mat = out_mat / torch.sum(out_mat)
     return out_mat
 
-def torch_quantile(t,q):
-    k = 1 + round(float(q) * (t.numel() - 1))
-    result = t.view(-1).kthvalue(k)[0]
-    return result
-
 def grid_sample(*args,**kwargs):
     if distutils.version.LooseVersion(torch.__version__) < distutils.version.LooseVersion("1.3.0"):
         return torch.nn.functional.grid_sample(*args,**kwargs)
     else:
         return torch.nn.functional.grid_sample(*args,**kwargs,align_corners=True)
 
+def irfft(mat,dim,onesided=False):
+    if distutils.version.LooseVersion(torch.__version__) < distutils.version.LooseVersion("1.8.0"):
+        return torch.irfft(mat,dim,onesided=onesided)
+    else:
+        return torch.fft.irfftn(mat,s=mat.shape)
+
+def rfft(mat,dim,onesided=False):
+    if distutils.version.LooseVersion(torch.__version__) < distutils.version.LooseVersion("1.8.0"):
+        return torch.rfft(mat,dim,onesided=onesided)
+    else:
+        return torch.fft.fftn(mat)
+    
 class LDDMM:
     def __init__(self,template=None,target=None,costmask=None,outdir='./',gpu_number=0,a=5.0,p=2,niter=100,epsilon=5e-3,epsilonL=1.0e-7,epsilonT=2.0e-5,sigma=2.0,sigmaR=1.0,nt=5,do_lddmm=1,do_affine=0,checkaffinestep=0,optimizer='gd',sg_mask_mode='ones',sg_rand_scale=1.0,sg_sigma=1.0,sg_climbcount=1,sg_holdcount=1,sg_gamma=0.9,adam_alpha=0.1,adam_beta1=0.9,adam_beta2=0.999,adam_epsilon=1e-8,ada_rho=0.95,ada_epsilon=1e-6,rms_rho=0.9,rms_epsilon=1e-8,rms_alpha=0.001,maxclimbcount=3,savebestv=False,minenergychange = 0.000001,minbeta=1e-4,dtype='float',im_norm_ms=0,slice_alignment=0,energy_fraction=0.02,energy_fraction_from=0,cc=0,cc_channels=[],we=0,we_channels=[],sigmaW=1.0,nMstep=5,dx=None,low_memory=0,update_epsilon=0,verbose=1,v_scale=1.0,v_scale_smoothing=0):
         self.params = {}
@@ -569,7 +576,7 @@ class LDDMM:
         #elif Ispacing[0] != Jspacing[0] or Ispacing[1] != Jspacing[1] or Ispacing[2] != Jspacing[2]
         #elif np.sum(Ispacing==Jspacing) < len(I.shape):
         elif self.params['dx'] is None and not all([list(x == Ispacing[0]) for x in Ispacing+Jspacing+Kspacing]):
-            print('ERROR: the image pixel spacings are not the same. Set parameter dx to force.\n')
+            print('ERROR: the image pixel spacings are not the same.\n')
             return -1
         else:
             self.I = I
@@ -599,7 +606,10 @@ class LDDMM:
         self.Khat = 1.0/self.Ahat
         # only move one kernel for now
         # TODO: try broadcasting this instead
-        self.Khat = torch.tensor(np.tile(np.reshape(self.Khat,(self.Khat.shape[0],self.Khat.shape[1],self.Khat.shape[2],1)),(1,1,1,2))).type(self.params['dtype']).to(device=self.params['cuda'])
+        if distutils.version.LooseVersion(torch.__version__) < distutils.version.LooseVersion("1.8.0"): # this is because pytorch fft functions have changed in input and output after 1.8. No longer outputs a two-channel matrix
+            self.Khat = torch.tensor(np.tile(np.reshape(self.Khat,(self.Khat.shape[0],self.Khat.shape[1],self.Khat.shape[2],1)),(1,1,1,2))).type(self.params['dtype']).to(device=self.params['cuda'])
+        else:
+            self.Khat = torch.tensor(np.reshape(self.Khat,(self.Khat.shape[0],self.Khat.shape[1],self.Khat.shape[2]))).type(self.params['dtype']).to(device=self.params['cuda'])
         
         # optimization multipliers (putting this in here because I want to reset this if I change the smoothing kernel)
         self.GDBeta = torch.tensor(1.0).type(self.params['dtype']).to(device=self.params['cuda'])
@@ -622,7 +632,10 @@ class LDDMM:
         self.Khat = 1.0/self.Ahat
         # only move one kernel for now
         # TODO: try broadcasting this instead
-        self.Khat = torch.tensor(np.tile(np.reshape(self.Khat,(self.Khat.shape[0],self.Khat.shape[1],1)),(1,1,2))).type(self.params['dtype']).to(device=self.params['cuda'])
+        if distutils.version.LooseVersion(torch.__version__) < distutils.version.LooseVersion("1.8.0"): # this is because pytorch fft functions have changed in input and output after 1.8. No longer outputs a two-channel matrix
+            self.Khat = torch.tensor(np.tile(np.reshape(self.Khat,(self.Khat.shape[0],self.Khat.shape[1],1)),(1,1,2))).type(self.params['dtype']).to(device=self.params['cuda'])
+        else:
+            self.Khat = torch.tensor(np.reshape(self.Khat,(self.Khat.shape[0],self.Khat.shape[1]))).type(self.params['dtype']).to(device=self.params['cuda'])
         
         # optimization multipliers (putting this in here because I want to reset this if I change the smoothing kernel)
         self.GDBeta = torch.tensor(1.0).type(self.params['dtype']).to(device=self.params['cuda'])
@@ -701,9 +714,9 @@ class LDDMM:
                             self.It[ii][i] = self.I[ii]
                         else:
                             if isinstance(self.I[ii],torch.Tensor):
-                                self.It[ii][i] = self.I[ii][:,:,:].clone().type(self.params['dtype']).cuda()
+                                self.It[ii][i] = self.I[ii][:,:,:].clone().type(self.params['dtype']).to(device=self.params['cuda'])
                             else:
-                                self.It[ii][i] = torch.tensor(self.I[ii][:,:,:]).type(self.params['dtype']).cuda()
+                                self.It[ii][i] = torch.tensor(self.I[ii][:,:,:]).type(self.params['dtype']).to(device=self.params['cuda'])
         else:
             if not hasattr(self,'vt0') and self.initializer_flags['lddmm'] == 1:
                 self.vt0 = []
@@ -746,10 +759,9 @@ class LDDMM:
             self.affineA = torch.tensor(np.eye(4)).type(self.params['dtype']).to(device=self.params['cuda'])
             self.lastaffineA = torch.tensor(np.eye(4)).type(self.params['dtype']).to(device=self.params['cuda'])
             self.gradA = torch.tensor(np.zeros((4,4))).type(self.params['dtype']).to(device=self.params['cuda'])
-
         
-        # linear contrast correction variables
-        if (not hasattr(self,'ccIbar') or self.initializer_flags['cc'] == 1) and self.params['cc'] <= 1: # we never reset cc variables
+        # contrast correction variables
+        if not hasattr(self,'ccIbar') or self.initializer_flags['cc'] == 1: # we never reset cc variables
             self.ccIbar = []
             self.ccJbar = []
             self.ccVarI = []
@@ -760,14 +772,17 @@ class LDDMM:
                 self.ccVarI.append(1.0)
                 self.ccCovIJ.append(1.0)
         
-        # polynomial contrast correction variables
-        if (not hasattr(self,'ccCoeff') or self.initializer_flags['cc'] == 1) and self.params['cc'] > 1: # we never reset cc variables
-            self.ccCoeff = [ [0.0]*(self.params['cc']) for i in range(len(self.I)) ]
+        # contrast correction variables
+        if not hasattr(self,'ccCoeff') or self.initializer_flags['cc'] == 1: # we never reset cc variables
+            self.ccIbar = []
+            self.ccJbar = []
+            self.ccVarI = []
+            self.ccCovIJ = []
             for i in range(len(self.I)):
-                self.ccCoeff[i][0] = ( (torch_quantile(self.J[i],0.1) + torch_quantile(self.J[i],0.9))/2 - (torch_quantile(self.I[i],0.1) + torch_quantile(self.I[i],0.9))/2 * (torch_quantile(self.J[i],0.9) - torch_quantile(self.J[i],0.1)) / (torch_quantile(self.I[i],0.9) - torch_quantile(self.I[i],0.1)) ) 
-                self.ccCoeff[i][1] = ( (torch_quantile(self.J[i],0.9) - torch_quantile(self.J[i],0.1)) / (torch_quantile(self.I[i],0.9) - torch_quantile(self.I[i],0.1)) )
-                #for ii in range(self.params['cc']-2):
-                #    self.ccCoeff[i].append(0.0)
+                self.ccIbar.append(0.0)
+                self.ccJbar.append(0.0)
+                self.ccVarI.append(1.0)
+                self.ccCovIJ.append(1.0)
         
         # weight estimation variables
         if self.initializer_flags['we'] == 1: # if number of channels changed, reset everything
@@ -955,9 +970,9 @@ class LDDMM:
                             self.It[ii][i] = self.I[ii]
                         else:
                             if isinstance(self.I[ii],torch.Tensor):
-                                self.It[ii][i] = self.I[ii][:,:].clone().type(self.params['dtype']).cuda()
+                                self.It[ii][i] = self.I[ii][:,:].clone().type(self.params['dtype']).to(device=self.params['cuda'])
                             else:
-                                self.It[ii][i] = torch.tensor(self.I[ii][:,:]).type(self.params['dtype']).cuda()
+                                self.It[ii][i] = torch.tensor(self.I[ii][:,:]).type(self.params['dtype']).to(device=self.params['cuda'])
         else:
             if not hasattr(self,'vt0') and self.initializer_flags['lddmm'] == 1:
                 self.vt0 = []
@@ -990,8 +1005,8 @@ class LDDMM:
         self.GDBetaAffineR = float(1.0)
         self.GDBetaAffineT = float(1.0)
         
-        # polynomial contrast correction variables
-        if (not hasattr(self,'ccIbar') or self.initializer_flags['cc'] == 1) and self.params['cc'] <= 1: # we never reset cc variables
+        # contrast correction variables
+        if not hasattr(self,'ccIbar') or self.initializer_flags['cc'] == 1: # we never reset cc variables
             self.ccIbar = []
             self.ccJbar = []
             self.ccVarI = []
@@ -1001,15 +1016,6 @@ class LDDMM:
                 self.ccJbar.append(0.0)
                 self.ccVarI.append(1.0)
                 self.ccCovIJ.append(1.0)
-        
-        # polynomial contrast correction variables
-        if (not hasattr(self,'ccCoeff') or self.initializer_flags['cc'] == 1) and self.params['cc'] > 1: # we never reset cc variables
-            self.ccCoeff = [ [0.0]*(self.params['cc']) for i in range(len(self.I)) ]
-            for i in range(len(self.I)):
-                self.ccCoeff[i][0] = ( (torch_quantile(self.J[i],0.1) + torch_quantile(self.J[i],0.9))/2 - (torch_quantile(self.I[i],0.1) + torch_quantile(self.I[i],0.9))/2 * (torch_quantile(self.J[i],0.9) - torch_quantile(self.J[i],0.1)) / (torch_quantile(self.I[i],0.9) - torch_quantile(self.I[i],0.1)) ) 
-                self.ccCoeff[i][1] = ( (torch_quantile(self.J[i],0.9) - torch_quantile(self.J[i],0.1)) / (torch_quantile(self.I[i],0.9) - torch_quantile(self.I[i],0.1)) )
-                #for ii in range(self.params['cc']-2):
-                #    self.ccCoeff[i].append(0.0)
         
         # weight estimation variables
         if self.initializer_flags['we'] == 1: # if number of channels changed, reset everything
@@ -1188,7 +1194,7 @@ class LDDMM:
                 phiinv0_gpu = torch.squeeze(grid_sample((phiinv0_gpu-self.X0).unsqueeze(0).unsqueeze(0),torch.stack(((self.X1-self.vt1[t]*self.dt)/(self.nx[1]*self.dx[1]-self.dx[1])*2,(self.X0-self.vt0[t]*self.dt)/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=2).unsqueeze(0),padding_mode='border')) + (self.X0-self.vt0[t]*self.dt)
                 phiinv1_gpu = torch.squeeze(grid_sample((phiinv1_gpu-self.X1).unsqueeze(0).unsqueeze(0),torch.stack(((self.X1-self.vt1[t]*self.dt)/(self.nx[1]*self.dx[1]-self.dx[1])*2,(self.X0-self.vt0[t]*self.dt)/(self.nx[0]*self.dx[0]-self.dx[0])*2),dim=2).unsqueeze(0),padding_mode='border')) + (self.X1-self.vt1[t]*self.dt)
             
-            if t == self.params['nt']-1 and (self.params['do_affine'] > 0  or (hasattr(self, 'affineA') and not torch.all(torch.eq(self.affineA,torch.tensor(np.eye(3)).type(self.params['dtype']).to(device=self.params['cuda']))) ) ): # run this if do_affine == 1 or affineA exists and isn't identity
+            if t == self.params['nt']-1 and (self.params['do_affine'] > 0  or (hasattr(self, 'affineA') and not torch.all(torch.eq(self.affineA,torch.tensor(np.eye(4)).type(self.params['dtype']).to(device=self.params['cuda']))) ) ): # run this if do_affine == 1 or affineA exists and isn't identity
                 phiinv0_gpu,phiinv1_gpu = self.forwardDeformationAffineVectorized2d(self.affineA,phiinv0_gpu,phiinv1_gpu)
             
             # deform the image
@@ -1450,23 +1456,8 @@ class LDDMM:
         CovIJ = torch.sum((I-Ibar)*(J-Jbar)*weight*self.M)/torch.sum(weight*self.M)
         return Ibar, Jbar, VarI, CovIJ
     
-    # compute polynomial contrast correction values
-    def computePolynomialContrastTransform(self,I,J,W):
-        D = torch.stack([I.view(-1)**(o) for o in range(self.params['cc'])],dim=1)
-        coeffs = torch.lstsq(torch.matmul(torch.transpose(D,0,1), (J.view(-1,1) * W.view(-1,1))) , torch.matmul(torch.transpose(D,0,1), (D * W.view(-1,1)) ) ).solution
-        return coeffs
-    
     # contrast correction convenience function
     def runContrastCorrection(self):
-        if self.params['cc'] <= 1:
-            self.runContrastCorrectionLinear()
-        else:
-            self.runContrastCorrectionPolynomial()
-            
-        return
-    
-    # contrast correction convenience function
-    def runContrastCorrectionLinear(self):
         for i in self.params['cc_channels']:
             if i in self.params['we_channels'] and self.params['we'] != 0:
                 if self.params['low_memory'] == 0:
@@ -1481,38 +1472,9 @@ class LDDMM:
         
         return
     
-    # contrast correction convenience function for polynomial functions
-    def runContrastCorrectionPolynomial(self):
-        for i in self.params['cc_channels']:
-            if i in self.params['we_channels'] and self.params['we'] != 0:
-                if self.params['low_memory'] == 0:
-                    self.ccCoeff[i] = self.computePolynomialContrastTransform(self.It[i][-1], self.J[i],self.W[i][0]*self.M)
-                else:
-                    self.ccCoeff[i] = self.computePolynomialContrastTransform(self.applyThisTransformNT(self.I[i],nt=self.params['nt']), self.J[i],self.W[i][0]*self.M)
-            else:
-                if self.params['low_memory'] == 0:
-                    self.ccCoeff[i] = self.computePolynomialContrastTransform(self.It[i][-1], self.J[i], self.M)
-                else:
-                    self.ccCoeff[i] = self.computePolynomialContrastTransform(self.applyThisTransformNT(self.I[i],nt=self.params['nt']), self.J[i], self.M)
-    
-    
-    # where i is the channels of the image
-    def applyContrastCorrectionLinear(self,I,i):
+    def applyContrastCorrection(self,I,i):
         #return [ ((x - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i]) for i,x in enumerate(I)]
         return ((I - self.ccIbar[i])*self.ccCovIJ[i]/self.ccVarI[i] + self.ccJbar[i])
-    
-    def applyContrastCorrectionPoly(self,I,i):
-        ccI = I.clone() * 0
-        for k in range(self.params['cc']):
-            ccI += I**k * self.ccCoeff[i][k]
-        
-        return ccI
-    
-    def applyContrastCorrection(self,I,i):
-        if self.params['cc'] <= 1:
-            return self.applyContrastCorrectionLinear(I,i)
-        else:
-            return self.applyContrastCorrectionPoly(I,i)
     
     # compute weight estimation
     def computeWeightEstimation(self):
@@ -1528,16 +1490,15 @@ class LDDMM:
                         self.W[i][ii] = 1.0/np.sqrt(2.0*np.pi*self.params['sigmaW'][ii]**2) * torch.exp(-1.0/2.0/self.params['sigmaW'][ii]**2 * (self.we_C[i][ii] - self.J[i])**2)
         
         for i in range(len(self.I)):
-            if i in self.params['we_channels']:
-                if self.J[0].dim() == 3:
-                    Wsum = torch.sum(torch.stack(self.W[i],3),3)
-                elif self.J[0].dim() == 2:
-                    Wsum = torch.sum(torch.stack(self.W[i],2),2)
-                
-                for ii in range(self.params['we']):
-                    self.W[i][ii] = self.W[i][ii] / Wsum
+            if self.J[0].dim() == 3:
+                Wsum = torch.sum(torch.stack(self.W[i],3),3)
+            elif self.J[0].dim() == 2:
+                Wsum = torch.sum(torch.stack(self.W[i],2),2)
+            
+            for ii in range(self.params['we']):
+                self.W[i][ii] = self.W[i][ii] / Wsum
         
-                del Wsum
+        del Wsum
         return
     
     # update weight estimation constants
@@ -1554,7 +1515,7 @@ class LDDMM:
         ER = 0.0
         for t in range(self.params['nt']):
             # rfft produces a 2 channel matrix, torch does not support complex number multiplication yet
-            ER += torch.sum(self.vt0[t]*torch.irfft(torch.rfft(self.vt0[t],3,onesided=False)*(1.0/self.Khat),3,onesided=False) + self.vt1[t]*torch.irfft(torch.rfft(self.vt1[t],3,onesided=False)*(1.0/self.Khat),3,onesided=False) + self.vt2[t]*torch.irfft(torch.rfft(self.vt2[t],3,onesided=False)*(1.0/self.Khat),3,onesided=False)) * 0.5 / self.params['sigmaR']**2 * self.dx[0]*self.dx[1]*self.dx[2]*self.dt / self.params['v_scale']**3
+            ER += torch.sum(self.vt0[t]*irfft(rfft(self.vt0[t],3,onesided=False)*(1.0/self.Khat),3,onesided=False) + self.vt1[t]*irfft(rfft(self.vt1[t],3,onesided=False)*(1.0/self.Khat),3,onesided=False) + self.vt2[t]*irfft(rfft(self.vt2[t],3,onesided=False)*(1.0/self.Khat),3,onesided=False)) * 0.5 / self.params['sigmaR']**2 * self.dx[0]*self.dx[1]*self.dx[2]*self.dt / self.params['v_scale']**3
         
         return ER
     
@@ -1563,7 +1524,7 @@ class LDDMM:
         ER = 0.0
         for t in range(self.params['nt']):
             # rfft produces a 2 channel matrix, torch does not support complex number multiplication yet
-            ER += torch.sum(self.vt0[t]*torch.irfft(torch.rfft(self.vt0[t],2,onesided=False)*(1.0/self.Khat),2,onesided=False) + self.vt1[t]*torch.irfft(torch.rfft(self.vt1[t],2,onesided=False)*(1.0/self.Khat),2,onesided=False)) * 0.5 / self.params['sigmaR']**2 * self.dx[0]*self.dx[1]*self.dt
+            ER += torch.sum(self.vt0[t]*irfft(rfft(self.vt0[t],2,onesided=False)*(1.0/self.Khat),2,onesided=False) + self.vt1[t]*irfft(rfft(self.vt1[t],2,onesided=False)*(1.0/self.Khat),2,onesided=False)) * 0.5 / self.params['sigmaR']**2 * self.dx[0]*self.dx[1]*self.dt
         
         return ER
     
@@ -2052,7 +2013,7 @@ class LDDMM:
             torch.cuda.empty_cache()
             
         if self.params['optimizer'] != 'adam':
-            grad_list = [torch.irfft(torch.rfft(x,3,onesided=False)*self.Khat,3,onesided=False) for x in grad_list]
+            grad_list = [irfft(rfft(x,3,onesided=False)*self.Khat,3,onesided=False) for x in grad_list]
             # add the regularization term
             grad_list[0] += self.vt0[t]/self.params['sigmaR']**2
             grad_list[1] += self.vt1[t]/self.params['sigmaR']**2
@@ -2150,7 +2111,7 @@ class LDDMM:
             torch.cuda.empty_cache()
             
         if self.params['optimizer'] != 'adam':
-            grad_list = [torch.irfft(torch.rfft(x,2,onesided=False)*self.Khat,2,onesided=False) for x in grad_list]
+            grad_list = [irfft(rfft(x,2,onesided=False)*self.Khat,2,onesided=False) for x in grad_list]
             # add the regularization term
             grad_list[0] += self.vt0[t]/self.params['sigmaR']**2
             grad_list[1] += self.vt1[t]/self.params['sigmaR']**2
@@ -2206,19 +2167,19 @@ class LDDMM:
             #self.vt1[t] -= self.params['adam_alpha']*(1-self.params['adam_beta2']**(iter+1))**(1/2) / (1-self.params['adam_beta1']**(iter+1)) * self.adam['m1'][t] / ((self.adam['v1'][t]) + self.params['adam_epsilon'])
             #if self.J[0].dim() > 2:
             #    self.vt2[t] -= self.params['adam_alpha']*(1-self.params['adam_beta2']**(iter+1))**(1/2) / (1-self.params['adam_beta1']**(iter+1)) * self.adam['m2'][t] / ((self.adam['v2'][t]) + self.params['adam_epsilon'])
-            self.vt0[t] -= self.params['adam_alpha']*(1-self.params['adam_beta2']**(iter+1))**(1/2) / (1-self.params['adam_beta1']**(iter+1)) * (torch.irfft(torch.rfft(self.adam['m0'][t] / (torch.sqrt(self.adam['v0'][t]) + self.params['adam_epsilon']),2,onesided=False)*self.Khat,2,onesided=False)) + self.vt0[t]/self.params['sigmaR']**2
-            self.vt1[t] -= self.params['adam_alpha']*(1-self.params['adam_beta2']**(iter+1))**(1/2) / (1-self.params['adam_beta1']**(iter+1)) * (torch.irfft(torch.rfft(self.adam['m1'][t] / (torch.sqrt(self.adam['v1'][t]) + self.params['adam_epsilon']),2,onesided=False)*self.Khat,2,onesided=False)) + self.vt1[t]/self.params['sigmaR']**2
+            self.vt0[t] -= self.params['adam_alpha']*(1-self.params['adam_beta2']**(iter+1))**(1/2) / (1-self.params['adam_beta1']**(iter+1)) * (irfft(rfft(self.adam['m0'][t] / (torch.sqrt(self.adam['v0'][t]) + self.params['adam_epsilon']),2,onesided=False)*self.Khat,2,onesided=False)) + self.vt0[t]/self.params['sigmaR']**2
+            self.vt1[t] -= self.params['adam_alpha']*(1-self.params['adam_beta2']**(iter+1))**(1/2) / (1-self.params['adam_beta1']**(iter+1)) * (irfft(rfft(self.adam['m1'][t] / (torch.sqrt(self.adam['v1'][t]) + self.params['adam_epsilon']),2,onesided=False)*self.Khat,2,onesided=False)) + self.vt1[t]/self.params['sigmaR']**2
             if self.J[0].dim() > 2:
-                self.vt2[t] -= self.params['adam_alpha']*(1-self.params['adam_beta2']**(iter+1))**(1/2) / (1-self.params['adam_beta1']**(iter+1)) * (torch.irfft(torch.rfft(self.adam['m2'][t] / (torch.sqrt(self.adam['v2'][t]) + self.params['adam_epsilon']),2,onesided=False)*self.Khat,2,onesided=False)) + self.vt2[t]/self.params['sigmaR']**2
+                self.vt2[t] -= self.params['adam_alpha']*(1-self.params['adam_beta2']**(iter+1))**(1/2) / (1-self.params['adam_beta1']**(iter+1)) * (irfft(rfft(self.adam['m2'][t] / (torch.sqrt(self.adam['v2'][t]) + self.params['adam_epsilon']),2,onesided=False)*self.Khat,2,onesided=False)) + self.vt2[t]/self.params['sigmaR']**2
         elif self.params['optimizer'] == "adadelta":
-            self.vt0[t] -= torch.irfft(torch.rfft(torch.sqrt(self.adadelta['v0'][t] + self.params['ada_epsilon']) / torch.sqrt(self.adadelta['m0'][t] + self.params['ada_epsilon']) * grad_list[0],3,onesided=False)*self.Khat,3,onesided=False)
-            self.vt1[t] -= torch.irfft(torch.rfft(torch.sqrt(self.adadelta['v1'][t] + self.params['ada_epsilon']) / torch.sqrt(self.adadelta['m1'][t] + self.params['ada_epsilon']) * grad_list[1],3,onesided=False)*self.Khat,3,onesided=False)
+            self.vt0[t] -= irfft(rfft(torch.sqrt(self.adadelta['v0'][t] + self.params['ada_epsilon']) / torch.sqrt(self.adadelta['m0'][t] + self.params['ada_epsilon']) * grad_list[0],3,onesided=False)*self.Khat,3,onesided=False)
+            self.vt1[t] -= irfft(rfft(torch.sqrt(self.adadelta['v1'][t] + self.params['ada_epsilon']) / torch.sqrt(self.adadelta['m1'][t] + self.params['ada_epsilon']) * grad_list[1],3,onesided=False)*self.Khat,3,onesided=False)
             if self.J[0].dim() > 2:
-                self.vt2[t] -= torch.irfft(torch.rfft(torch.sqrt(self.adadelta['v2'][t] + self.params['ada_epsilon']) / torch.sqrt(self.adadelta['m2'][t] + self.params['ada_epsilon']) * grad_list[2],3,onesided=False)*self.Khat,3,onesided=False)
-            self.adadelta['v0'][t] = self.params['ada_rho']*self.adadelta['v0'][t] + (1-self.params['ada_rho'])*(-1*torch.irfft(torch.rfft(torch.sqrt(self.adadelta['v0'][t] + self.params['ada_epsilon']) / torch.sqrt(self.adadelta['m0'][t] + self.params['ada_epsilon']) * grad_list[0],3,onesided=False)*self.Khat,3,onesided=False))**2
-            self.adadelta['v1'][t] = self.params['ada_rho']*self.adadelta['v1'][t] + (1-self.params['ada_rho'])*(-1*torch.irfft(torch.rfft(torch.sqrt(self.adadelta['v1'][t] + self.params['ada_epsilon']) / torch.sqrt(self.adadelta['m1'][t] + self.params['ada_epsilon']) * grad_list[1],3,onesided=False)*self.Khat,3,onesided=False))**2
+                self.vt2[t] -= irfft(rfft(torch.sqrt(self.adadelta['v2'][t] + self.params['ada_epsilon']) / torch.sqrt(self.adadelta['m2'][t] + self.params['ada_epsilon']) * grad_list[2],3,onesided=False)*self.Khat,3,onesided=False)
+            self.adadelta['v0'][t] = self.params['ada_rho']*self.adadelta['v0'][t] + (1-self.params['ada_rho'])*(-1*irfft(rfft(torch.sqrt(self.adadelta['v0'][t] + self.params['ada_epsilon']) / torch.sqrt(self.adadelta['m0'][t] + self.params['ada_epsilon']) * grad_list[0],3,onesided=False)*self.Khat,3,onesided=False))**2
+            self.adadelta['v1'][t] = self.params['ada_rho']*self.adadelta['v1'][t] + (1-self.params['ada_rho'])*(-1*irfft(rfft(torch.sqrt(self.adadelta['v1'][t] + self.params['ada_epsilon']) / torch.sqrt(self.adadelta['m1'][t] + self.params['ada_epsilon']) * grad_list[1],3,onesided=False)*self.Khat,3,onesided=False))**2
             if self.J[0].dim() > 2:
-                self.adadelta['v2'][t] = self.params['ada_rho']*self.adadelta['v2'][t] + (1-self.params['ada_rho'])*(-1*torch.irfft(torch.rfft(torch.sqrt(self.adadelta['v2'][t] + self.params['ada_epsilon']) / torch.sqrt(self.adadelta['m2'][t] + self.params['ada_epsilon']) * grad_list[2],3,onesided=False)*self.Khat,3,onesided=False))**2
+                self.adadelta['v2'][t] = self.params['ada_rho']*self.adadelta['v2'][t] + (1-self.params['ada_rho'])*(-1*irfft(rfft(torch.sqrt(self.adadelta['v2'][t] + self.params['ada_epsilon']) / torch.sqrt(self.adadelta['m2'][t] + self.params['ada_epsilon']) * grad_list[2],3,onesided=False)*self.Khat,3,onesided=False))**2
             #self.vt0[t] -= (self.adadelta['v0'][t] + self.params['ada_epsilon']) / (self.adadelta['m0'][t] + self.params['ada_epsilon']) * grad_list[0]
             #self.vt1[t] -= (self.adadelta['v1'][t] + self.params['ada_epsilon']) / (self.adadelta['m1'][t] + self.params['ada_epsilon']) * grad_list[1]
             #self.vt2[t] -= (self.adadelta['v2'][t] + self.params['ada_epsilon']) / (self.adadelta['m2'][t] + self.params['ada_epsilon']) * grad_list[2]
@@ -2226,10 +2187,10 @@ class LDDMM:
             #self.adadelta['v1'][t] = self.params['ada_rho']*self.adadelta['v1'][t] + (1-self.params['ada_rho'])*(-1*(self.adadelta['v1'][t] + self.params['ada_epsilon']) / (self.adadelta['m1'][t] + self.params['ada_epsilon']) * grad_list[1])**2
             #self.adadelta['v2'][t] = self.params['ada_rho']*self.adadelta['v2'][t] + (1-self.params['ada_rho'])*(-1*(self.adadelta['v2'][t] + self.params['ada_epsilon']) / (self.adadelta['m2'][t] + self.params['ada_epsilon']) * grad_list[2])**2
         elif self.params['optimizer'] == 'rmsprop':
-            self.vt0[t] -= torch.irfft(torch.rfft(self.params['rms_alpha'] / torch.sqrt(self.rmsprop['m0'][t] + self.params['rms_epsilon']) * grad_list[0],3,onesided=False)*self.Khat,3,onesided=False) + self.vt0[t]/self.params['sigmaR']**2
-            self.vt1[t] -= torch.irfft(torch.rfft(self.params['rms_alpha'] / torch.sqrt(self.rmsprop['m1'][t] + self.params['rms_epsilon']) * grad_list[1],3,onesided=False)*self.Khat,3,onesided=False) + self.vt1[t]/self.params['sigmaR']**2
+            self.vt0[t] -= irfft(rfft(self.params['rms_alpha'] / torch.sqrt(self.rmsprop['m0'][t] + self.params['rms_epsilon']) * grad_list[0],3,onesided=False)*self.Khat,3,onesided=False) + self.vt0[t]/self.params['sigmaR']**2
+            self.vt1[t] -= irfft(rfft(self.params['rms_alpha'] / torch.sqrt(self.rmsprop['m1'][t] + self.params['rms_epsilon']) * grad_list[1],3,onesided=False)*self.Khat,3,onesided=False) + self.vt1[t]/self.params['sigmaR']**2
             if self.J[0].dim() > 2:
-                self.vt2[t] -= torch.irfft(torch.rfft(self.params['rms_alpha'] / torch.sqrt(self.rmsprop['m2'][t] + self.params['rms_epsilon']) * grad_list[2],3,onesided=False)*self.Khat,3,onesided=False) + self.vt2[t]/self.params['sigmaR']**2
+                self.vt2[t] -= irfft(rfft(self.params['rms_alpha'] / torch.sqrt(self.rmsprop['m2'][t] + self.params['rms_epsilon']) * grad_list[2],3,onesided=False)*self.Khat,3,onesided=False) + self.vt2[t]/self.params['sigmaR']**2
         elif self.params['optimizer'] == 'sgdm':
             self.vt0[t] -= self.sgdm['m0'][t]
             self.vt1[t] -= self.sgdm['m1'][t]
@@ -2727,7 +2688,7 @@ class LDDMM:
                 if self.params['low_memory'] < 1:
                     self.forwardDeformation2d()
                 
-                if self.params['cc'] >= 1:
+                if self.params['cc'] == 1:
                     self.runContrastCorrection()
                 
                 # update weight estimation
@@ -2747,7 +2708,7 @@ class LDDMM:
                 if self.params['low_memory'] < 1:
                     self.forwardDeformation()
                 
-                if self.params['cc'] >= 1:
+                if self.params['cc'] == 1:
                     self.runContrastCorrection()
                 
                 # update weight estimation

@@ -5,7 +5,6 @@ import time
 import sys
 import os
 import distutils.version
-sys.path.insert(0,'/cis/home/leebc/Software/')
 import nibabel as nib
 
 def mygaussian(sigma=1,size=5):

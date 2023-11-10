@@ -142,7 +142,7 @@ class LDDMM:
         print('>    sigmaR          = ' + str(sigmaR)+ ' (regularization term coefficient (0.5/sigmaR**2))')
         print('>    nt              = ' + str(nt) + ' (number of time steps in velocity field)')
         print('>    do_lddmm        = ' + str(do_lddmm) + ' (perform LDDMM step, 0 = no, 1 = yes)')
-        print('>    do_affine       = ' + str(do_affine) + ' (interleave linear registration: 0 = no, 1 = affine, 2 = rigid)')
+        print('>    do_affine       = ' + str(do_affine) + ' (interleave linear registration: 0 = no, 1 = affine, 2 = rigid, 3 = rigid + scale)')
         print('>    checkaffinestep = ' + str(checkaffinestep) + ' (evaluate linear matching energy: 0 = no, 1 = yes)')
         print('>    im_norm_ms      = ' + str(im_norm_ms) + ' (normalize image by mean and std: 0 = no, 1 = yes)')
         print('>    gpu_number      = ' + str(gpu_number) + ' (index of CUDA_VISIBLE_DEVICES to use)')
@@ -1867,6 +1867,14 @@ class LDDMM:
         if mode == 'rigid':
             self.gradA -= torch.transpose(self.gradA,0,1)
         
+        # if similitude
+        if mode == "sim":
+            gradA_t = torch.transpose(self.gradA.clone(),0,1)
+            gradA_t[0,0] = 0
+            gradA_t[1,1] = 0
+            gradA_t[2,2] = 0
+            self.gradA -= gradA_t
+        
         #if self.params['v_scale'] != 1:
         #    del grad_divisor_x_scale
         #    del grad_divisor_y_scale
@@ -1916,6 +1924,13 @@ class LDDMM:
         # if rigid
         if mode == 'rigid':
             self.gradA -= torch.transpose(self.gradA,0,1)
+        
+        # if similitude
+        if mode == "sim":
+            gradA_t = torch.transpose(self.gradA.clone(),0,1)
+            gradA_t[0,0] = 0
+            gradA_t[1,1] = 0
+            self.gradA -= gradA_t
     
     
     # compute gradient per time step for time varying velocity field parameterization
@@ -2793,6 +2808,11 @@ class LDDMM:
                     self.calculateGradientA(self.affineA,lambda1,mode='rigid')
                 elif self.J[0].dim()==2:
                     self.calculateGradientA2d(self.affineA,lambda1,mode='rigid')
+            elif self.params['do_affine'] == 3:
+                if self.J[0].dim()==3:
+                    self.calculateGradientA(self.affineA,lambda1,mode='sim')
+                elif self.J[0].dim()==2:
+                    self.calculateGradientA2d(self.affineA,lambda1,mode='sim')
             
             if self.params['low_memory'] > 0:
                 torch.cuda.empty_cache()

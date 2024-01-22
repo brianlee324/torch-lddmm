@@ -20,6 +20,13 @@ Download the package with: git clone github.com/brianlee324/torch-lddmm.git
 
 In a Python session, "import torch_lddmm" and load image1 and image2 as numpy arrays. In our convention, the template image is warped towards the target image. The template and target images should be the same size and voxel spacing (pad or resample if not).
 
+### Example Images: Atlas-based segmentation of histological slides after registration
+<p float="left">
+  <img src="/notebook/histo_1.png" height="200" />
+  <img src="/notebook/histo_2.png" height="200" /> 
+</p>
+
+
 ### Example: Basic LDDMM
 ```python
 lddmm = torch_lddmm.LDDMM(template=image1, target=image2, a=8, epsilon=1.0, sigma=10.0, sigmaR=10.0, dx=[0.1,0.1,0.1]) # create object

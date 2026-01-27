@@ -58,7 +58,7 @@ def rfft(mat,dim,onesided=False):
         return torch.fft.fftn(mat)
     
 class LDDMM:
-    def __init__(self,template=None,target=None,costmask=None,outdir='./',gpu_number=0,a=5.0,p=2,niter=100,epsilon=5e-3,epsilonL=1.0e-7,epsilonT=2.0e-5,sigma=2.0,sigmaR=1.0,nt=5,do_lddmm=1,do_affine=0,checkaffinestep=0,optimizer='gd',sg_mask_mode='ones',sg_rand_scale=1.0,sg_sigma=1.0,sg_climbcount=1,sg_holdcount=1,sg_gamma=0.9,adam_alpha=0.1,adam_beta1=0.9,adam_beta2=0.999,adam_epsilon=1e-8,ada_rho=0.95,ada_epsilon=1e-6,rms_rho=0.9,rms_epsilon=1e-8,rms_alpha=0.001,maxclimbcount=3,savebestv=False,minenergychange = 0.000001,minbeta=1e-4,dtype='float',im_norm_ms=0,slice_alignment=0,energy_fraction=0.02,energy_fraction_from=0,cc=0,cc_channels=[],we=0,we_channels=[],sigmaW=1.0,nMstep=5,dx=None,low_memory=0,update_epsilon=0,verbose=1,v_scale=1.0,v_scale_smoothing=0):
+    def __init__(self,template=None,target=None,costmask=None,outdir='./',gpu_number=0,a=5.0,p=2,niter=100,epsilon=5e-3,epsilonL=1.0e-7,epsilonT=2.0e-5,sigma=2.0,sigmaR=1.0,nt=5,do_lddmm=1,do_affine=0,checkaffinestep=0,optimizer='gd',sg_mask_mode='ones',sg_rand_scale=1.0,sg_sigma=1.0,sg_climbcount=1,sg_holdcount=1,sg_gamma=0.9,adam_alpha=0.1,adam_beta1=0.9,adam_beta2=0.999,adam_epsilon=1e-8,ada_rho=0.95,ada_epsilon=1e-6,rms_rho=0.9,rms_epsilon=1e-8,rms_alpha=0.001,maxclimbcount=3,savebestv=False,minenergychange = 0.000001,minbeta=1e-4,dtype='float',im_norm_ms=0,slice_alignment=0,energy_fraction=0.02,energy_fraction_from=0,cc=0,cc_channels=[],we=0,we_channels=[],sigmaW=1.0,nMstep=5,dx=None,low_memory=0,update_epsilon=0,verbose=1,v_scale=1.0,v_scale_smoothing=0,silent=False):
         self.params = {}
         self.params['gpu_number'] = gpu_number
         self.params['a'] = float(a)
@@ -121,6 +121,7 @@ class LDDMM:
         self.params['low_memory'] = low_memory
         self.params['update_epsilon'] = float(update_epsilon)
         self.params['verbose'] = float(verbose)
+        self.params['silent'] = silent
         optimizer_dict = {}
         optimizer_dict['gd'] = 'gradient descent'
         optimizer_dict['gdr'] = 'gradient descent with reducing epsilon'
@@ -130,107 +131,108 @@ class LDDMM:
         optimizer_dict['rmsprop'] = 'root mean square propagation (UNDER CONSTRUCTION)'
         optimizer_dict['sgd'] = 'stochastic gradient descent'
         optimizer_dict['sgdm'] = 'stochastic gradient descent with momentum (UNDER CONSTRUCTION)'
-        print('\nCurrent parameters:')
-        print('>    a               = ' + str(a) + ' (smoothing kernel, a*(pixel_size))')
-        print('>    p               = ' + str(p) + ' (smoothing kernel power, p*2)')
-        print('>    niter           = ' + str(niter) + ' (number of iterations)')
-        print('>    epsilon         = ' + str(epsilon) + ' (gradient descent step size)')
-        print('>    epsilonL        = ' + str(epsilonL) + ' (gradient descent step size, affine)')
-        print('>    epsilonT        = ' + str(epsilonT) + ' (gradient descent step size, translation)')
-        print('>    minbeta         = ' + str(minbeta) + ' (smallest multiple of epsilon)')
-        print('>    sigma           = ' + str(sigma) + ' (matching term coefficient (0.5/sigma**2))')
-        print('>    sigmaR          = ' + str(sigmaR)+ ' (regularization term coefficient (0.5/sigmaR**2))')
-        print('>    nt              = ' + str(nt) + ' (number of time steps in velocity field)')
-        print('>    do_lddmm        = ' + str(do_lddmm) + ' (perform LDDMM step, 0 = no, 1 = yes)')
-        print('>    do_affine       = ' + str(do_affine) + ' (interleave linear registration: 0 = no, 1 = affine, 2 = rigid, 3 = rigid + scale)')
-        print('>    checkaffinestep = ' + str(checkaffinestep) + ' (evaluate linear matching energy: 0 = no, 1 = yes)')
-        print('>    im_norm_ms      = ' + str(im_norm_ms) + ' (normalize image by mean and std: 0 = no, 1 = yes)')
-        print('>    gpu_number      = ' + str(gpu_number) + ' (index of CUDA_VISIBLE_DEVICES to use)')
-        print('>    dtype           = ' + str(dtype) + ' (bit depth, \'float\' or \'double\')')
-        print('>    energy_fraction = ' + str(energy_fraction) + ' (fraction of initial energy at which to stop)')
-        print('>    cc              = ' + str(cc) + ' (contrast correction: 0 = no, 1 = yes)')
-        print('>    cc_channels     = ' + str(cc_channels) + ' (image channels to run contrast correction (0-indexed))')
-        print('>    we              = ' + str(we) + ' (weight estimation: 0 = no, 2+ = yes)')
-        print('>    we_channels     = ' + str(we_channels) + ' (image channels to run weight estimation (0-indexed))')
-        print('>    sigmaW          = ' + str(sigmaW) + ' (coefficient for each weight estimation class)')
-        print('>    nMstep          = ' + str(nMstep) + ' (update weight estimation every nMstep steps)')
-        print('>    v_scale         = ' + str(v_scale) + ' (parameter scaling factor)')
-        if v_scale < 1.0:
-            print('>    v_scale_smooth  = ' + str(v_scale_smoothing) + ' (smoothing before interpolation for v-scaling: 0 = no, 1 = yes)')
-        print('>    low_memory      = ' + str(low_memory) + ' (low memory mode: 0 = no, 1 = yes)')
-        print('>    update_epsilon  = ' + str(update_epsilon) + ' (update optimization step size between runs: 0 = no, 1 = yes)')
-        print('>    outdir          = ' + str(outdir) + ' (output directory name)')
-        if optimizer in optimizer_dict:
-            print('>    optimizer       = ' + str(optimizer_dict[optimizer]) + ' (optimizer type)')
-            if optimizer == 'adam':
-                print('>    +adam_alpha     = ' + str(adam_alpha) + ' (learning rate)')
-                print('>    +adam_beta1     = ' + str(adam_beta1) + ' (decay rate 1)')
-                print('>    +adam_beta2     = ' + str(adam_beta2) + ' (decay rate 2)')
-                print('>    +adam_epsilon   = ' + str(adam_epsilon) + ' (epsilon)')
-                print('>    +sg_sigma       = ' + str(sg_sigma) + ' (subsampler sigma (for gaussian mode))')
-                print('>    +sg_mask_mode   = ' + str(sg_mask_mode) + ' (subsampler scheme)')
-                print('>    +sg_climbcount  = ' + str(sg_climbcount) + ' (# of times energy is allowed to increase)')
-                print('>    +sg_holdcount   = ' + str(sg_holdcount) + ' (# of iterations per random mask)')
-                print('>    +sg_rand_scale  = ' + str(sg_rand_scale) + ' (scale for non-gauss sg masking)')
-            elif optimizer == "adadelta":
-                print('>    +ada_rho        = ' + str(ada_rho) + ' (decay rate)')
-                print('>    +ada_epsilon    = ' + str(ada_epsilon) + ' (epsilon)')
-            elif optimizer == "rmsprop":
-                print('>    +rms_rho        = ' + str(rms_rho) + ' (decay rate)')
-                print('>    +rms_epsilon    = ' + str(rms_epsilon) + ' (epsilon)')
-                print('>    +rms_alpha      = ' + str(rms_alpha) + ' (learning rate)')
-                print('>    +sg_sigma       = ' + str(sg_sigma) + ' (subsampler sigma (for gaussian mode))')
-                print('>    +sg_mask_mode   = ' + str(sg_mask_mode) + ' (subsampler scheme)')
-                print('>    +sg_climbcount  = ' + str(sg_climbcount) + ' (# of times energy is allowed to increase)')
-                print('>    +sg_holdcount   = ' + str(sg_holdcount) + ' (# of iterations per random mask)')
-                print('>    +sg_rand_scale  = ' + str(sg_rand_scale) + ' (scale for non-gauss sg masking)')
-            elif optimizer == 'sgd' or optimizer == 'sgdm':
-                print('>    +sg_sigma       = ' + str(sg_sigma) + ' (subsampler sigma (for gaussian mode))')
-                print('>    +sg_mask_mode   = ' + str(sg_mask_mode) + ' (subsampler scheme)')
-                print('>    +sg_climbcount  = ' + str(sg_climbcount) + ' (# of times energy is allowed to increase)')
-                print('>    +sg_holdcount   = ' + str(sg_holdcount) + ' (# of iterations per random mask)')
-                print('>    +sg_rand_scale  = ' + str(sg_rand_scale) + ' (scale for non-gauss sg masking)')
-                if optimizer == 'sgdm':
-                    print('>    +sg_gamma       = ' + str(sg_gamma) + ' (fraction of paste updates)')
+        if not self.params['silent']:
+            print('\nCurrent parameters:')
+            print('>    a               = ' + str(a) + ' (smoothing kernel, a*(pixel_size))')
+            print('>    p               = ' + str(p) + ' (smoothing kernel power, p*2)')
+            print('>    niter           = ' + str(niter) + ' (number of iterations)')
+            print('>    epsilon         = ' + str(epsilon) + ' (gradient descent step size)')
+            print('>    epsilonL        = ' + str(epsilonL) + ' (gradient descent step size, affine)')
+            print('>    epsilonT        = ' + str(epsilonT) + ' (gradient descent step size, translation)')
+            print('>    minbeta         = ' + str(minbeta) + ' (smallest multiple of epsilon)')
+            print('>    sigma           = ' + str(sigma) + ' (matching term coefficient (0.5/sigma**2))')
+            print('>    sigmaR          = ' + str(sigmaR)+ ' (regularization term coefficient (0.5/sigmaR**2))')
+            print('>    nt              = ' + str(nt) + ' (number of time steps in velocity field)')
+            print('>    do_lddmm        = ' + str(do_lddmm) + ' (perform LDDMM step, 0 = no, 1 = yes)')
+            print('>    do_affine       = ' + str(do_affine) + ' (interleave linear registration: 0 = no, 1 = affine, 2 = rigid, 3 = rigid + scale)')
+            print('>    checkaffinestep = ' + str(checkaffinestep) + ' (evaluate linear matching energy: 0 = no, 1 = yes)')
+            print('>    im_norm_ms      = ' + str(im_norm_ms) + ' (normalize image by mean and std: 0 = no, 1 = yes)')
+            print('>    gpu_number      = ' + str(gpu_number) + ' (index of CUDA_VISIBLE_DEVICES to use)')
+            print('>    dtype           = ' + str(dtype) + ' (bit depth, \'float\' or \'double\')')
+            print('>    energy_fraction = ' + str(energy_fraction) + ' (fraction of initial energy at which to stop)')
+            print('>    cc              = ' + str(cc) + ' (contrast correction: 0 = no, 1 = yes)')
+            print('>    cc_channels     = ' + str(cc_channels) + ' (image channels to run contrast correction (0-indexed))')
+            print('>    we              = ' + str(we) + ' (weight estimation: 0 = no, 2+ = yes)')
+            print('>    we_channels     = ' + str(we_channels) + ' (image channels to run weight estimation (0-indexed))')
+            print('>    sigmaW          = ' + str(sigmaW) + ' (coefficient for each weight estimation class)')
+            print('>    nMstep          = ' + str(nMstep) + ' (update weight estimation every nMstep steps)')
+            print('>    v_scale         = ' + str(v_scale) + ' (parameter scaling factor)')
+            if v_scale < 1.0:
+                print('>    v_scale_smooth  = ' + str(v_scale_smoothing) + ' (smoothing before interpolation for v-scaling: 0 = no, 1 = yes)')
+            print('>    low_memory      = ' + str(low_memory) + ' (low memory mode: 0 = no, 1 = yes)')
+            print('>    update_epsilon  = ' + str(update_epsilon) + ' (update optimization step size between runs: 0 = no, 1 = yes)')
+            print('>    outdir          = ' + str(outdir) + ' (output directory name)')
+            if optimizer in optimizer_dict:
+                print('>    optimizer       = ' + str(optimizer_dict[optimizer]) + ' (optimizer type)')
+                if optimizer == 'adam':
+                    print('>    +adam_alpha     = ' + str(adam_alpha) + ' (learning rate)')
+                    print('>    +adam_beta1     = ' + str(adam_beta1) + ' (decay rate 1)')
+                    print('>    +adam_beta2     = ' + str(adam_beta2) + ' (decay rate 2)')
+                    print('>    +adam_epsilon   = ' + str(adam_epsilon) + ' (epsilon)')
+                    print('>    +sg_sigma       = ' + str(sg_sigma) + ' (subsampler sigma (for gaussian mode))')
+                    print('>    +sg_mask_mode   = ' + str(sg_mask_mode) + ' (subsampler scheme)')
+                    print('>    +sg_climbcount  = ' + str(sg_climbcount) + ' (# of times energy is allowed to increase)')
+                    print('>    +sg_holdcount   = ' + str(sg_holdcount) + ' (# of iterations per random mask)')
+                    print('>    +sg_rand_scale  = ' + str(sg_rand_scale) + ' (scale for non-gauss sg masking)')
+                elif optimizer == "adadelta":
+                    print('>    +ada_rho        = ' + str(ada_rho) + ' (decay rate)')
+                    print('>    +ada_epsilon    = ' + str(ada_epsilon) + ' (epsilon)')
+                elif optimizer == "rmsprop":
+                    print('>    +rms_rho        = ' + str(rms_rho) + ' (decay rate)')
+                    print('>    +rms_epsilon    = ' + str(rms_epsilon) + ' (epsilon)')
+                    print('>    +rms_alpha      = ' + str(rms_alpha) + ' (learning rate)')
+                    print('>    +sg_sigma       = ' + str(sg_sigma) + ' (subsampler sigma (for gaussian mode))')
+                    print('>    +sg_mask_mode   = ' + str(sg_mask_mode) + ' (subsampler scheme)')
+                    print('>    +sg_climbcount  = ' + str(sg_climbcount) + ' (# of times energy is allowed to increase)')
+                    print('>    +sg_holdcount   = ' + str(sg_holdcount) + ' (# of iterations per random mask)')
+                    print('>    +sg_rand_scale  = ' + str(sg_rand_scale) + ' (scale for non-gauss sg masking)')
+                elif optimizer == 'sgd' or optimizer == 'sgdm':
+                    print('>    +sg_sigma       = ' + str(sg_sigma) + ' (subsampler sigma (for gaussian mode))')
+                    print('>    +sg_mask_mode   = ' + str(sg_mask_mode) + ' (subsampler scheme)')
+                    print('>    +sg_climbcount  = ' + str(sg_climbcount) + ' (# of times energy is allowed to increase)')
+                    print('>    +sg_holdcount   = ' + str(sg_holdcount) + ' (# of iterations per random mask)')
+                    print('>    +sg_rand_scale  = ' + str(sg_rand_scale) + ' (scale for non-gauss sg masking)')
+                    if optimizer == 'sgdm':
+                        print('>    +sg_gamma       = ' + str(sg_gamma) + ' (fraction of paste updates)')
         
-        else:
-            print('WARNING: optimizer \'' + str(optimizer) + '\' not recognized. Setting to basic gradient descent with reducing step size.')
-            self.params['optimizer'] = 'gdr'
-        
-        print('\n')
-        if template is None:
-            print('WARNING: template file name is not set. Use LDDMM.setParams(\'template\',filename\/array).\n')
-        elif isinstance(template,np.ndarray):
-            print('>    template        = numpy.ndarray\n')
-        elif isinstance(template,list) and isinstance(template[0],np.ndarray):
-            myprintstring = '>    template        = [numpy.ndarray'
-            for i in range(len(template)-1):
-                myprintstring = myprintstring + ', numpy.ndarray'
+            else:
+                print('WARNING: optimizer \'' + str(optimizer) + '\' not recognized. Setting to basic gradient descent with reducing step size.')
+                self.params['optimizer'] = 'gdr'
             
-            myprintstring = myprintstring + ']\n'
-            print(myprintstring)
-        else:
-            print('>    template        = ' + str(template) + '\n')
-        
-        if target is None:
-            print('WARNING: target file name is not set. Use LDDMM.setParams(\'target\',filename\/array).\n')
-        elif isinstance(target,np.ndarray):
-            print('>    target          = numpy.ndarray\n')
-        elif isinstance(target,list) and isinstance(target[0],np.ndarray):
-            myprintstring = '>    target          = [numpy.ndarray'
-            for i in range(len(target)-1):
-                myprintstring = myprintstring + ', numpy.ndarray'
+            print('\n')
+            if template is None:
+                print('WARNING: template file name is not set. Use LDDMM.setParams(\'template\',filename\/array).\n')
+            elif isinstance(template,np.ndarray):
+                print('>    template        = numpy.ndarray\n')
+            elif isinstance(template,list) and isinstance(template[0],np.ndarray):
+                myprintstring = '>    template        = [numpy.ndarray'
+                for i in range(len(template)-1):
+                    myprintstring = myprintstring + ', numpy.ndarray'
+                
+                myprintstring = myprintstring + ']\n'
+                print(myprintstring)
+            else:
+                print('>    template        = ' + str(template) + '\n')
             
-            myprintstring = myprintstring + ']\n'
-            print(myprintstring)
-        else:
-            print('>    target          = ' + str(target) + '\n')
-        
-        if isinstance(costmask,np.ndarray):
-            print('>    costmask        = numpy.ndarray (costmask file name or numpy.ndarray)')
-        else:
-            print('>    costmask        = ' + str(costmask) + ' (costmask file name or numpy.ndarray)')
-        
+            if target is None:
+                print('WARNING: target file name is not set. Use LDDMM.setParams(\'target\',filename\/array).\n')
+            elif isinstance(target,np.ndarray):
+                print('>    target          = numpy.ndarray\n')
+            elif isinstance(target,list) and isinstance(target[0],np.ndarray):
+                myprintstring = '>    target          = [numpy.ndarray'
+                for i in range(len(target)-1):
+                    myprintstring = myprintstring + ', numpy.ndarray'
+                
+                myprintstring = myprintstring + ']\n'
+                print(myprintstring)
+            else:
+                print('>    target          = ' + str(target) + '\n')
+            
+            if isinstance(costmask,np.ndarray):
+                print('>    costmask        = numpy.ndarray (costmask file name or numpy.ndarray)')
+            else:
+                print('>    costmask        = ' + str(costmask) + ' (costmask file name or numpy.ndarray)')
+            
         self.initializer_flags = {}
         self.initializer_flags['load'] = 1
         self.initializer_flags['v_scale'] = 0
@@ -432,7 +434,8 @@ class LDDMM:
         # set timesteps to 1 if doing affine only
         if self.params['do_affine'] > 0 and self.params['do_lddmm'] == 0 and not hasattr(self,'vt0'):
             if self.params['nt'] != 1:
-                print('WARNING: nt set to 1 because settings indicate affine registration only.')
+                if not self.params['silent']:
+                    print('WARNING: nt set to 1 because settings indicate affine registration only.')
                 self.params['nt'] = 1
         elif self.params['do_affine'] == 0 and self.params['do_lddmm'] == 0:
             flag = -1
@@ -1865,7 +1868,8 @@ class LDDMM:
         
         # if rigid
         if mode == 'rigid':
-            self.gradA -= torch.transpose(self.gradA,0,1)
+            #self.gradA -= torch.transpose(self.gradA,0,1)
+            self.gradA = self.gradA - torch.transpose(self.gradA.clone(),0,1)
         
         # if similitude
         if mode == "sim":
@@ -1923,7 +1927,8 @@ class LDDMM:
         
         # if rigid
         if mode == 'rigid':
-            self.gradA -= torch.transpose(self.gradA,0,1)
+            #self.gradA -= torch.transpose(self.gradA,0,1)
+            self.gradA = self.gradA - torch.transpose(self.gradA,0,1)
         
         # if similitude
         if mode == "sim":
@@ -2757,7 +2762,7 @@ class LDDMM:
             
             end_time = time.time()
             
-            if self.params['verbose'] == 1:
+            if self.params['verbose'] == 1 and not self.params['silent']:
                 if it > 0:
                     total_time += end_time-start_time
                     #print('iter: ' + str(it) + ', E = ' + str(E.item()) + ', ER = ' + str(ER.item()) + ', EM = ' + str(EM.item()) + ', ep = ' + str((self.GDBeta*self.params['epsilon']).item()) + ', time = ' + str(end_time-start_time) + '.')
@@ -2772,11 +2777,14 @@ class LDDMM:
             # or (self.EAll[-1]/self.EAll[-2] < 1-self.params['minenergychange'] and self.EAll[-2]/self.EAll[-3] < 1-self.params['minenergychange'] and self.EAll[-3]/self.EAll[-4] < 1-self.params['minenergychange'] and self.EAll[-4]/self.EAll[-5] < 1-self.params['minenergychange'])
             if it == self.params['niter']-1 or ((self.params['do_lddmm'] == 0 or self.GDBeta < self.params['minbeta']) and (self.params['do_affine']==0 or (self.GDBetaAffineR < self.params['minbeta'] and self.GDBetaAffineT < self.params['minbeta']))) or self.EAll[-1]/self.EAll[self.params['energy_fraction_from']] <= self.params['energy_fraction']:
                 if ((self.params['do_lddmm'] == 0 or self.GDBeta < self.params['minbeta']) and (self.params['do_affine']==0 or (self.GDBetaAffineR < self.params['minbeta'] and self.GDBetaAffineT < self.params['minbeta']))):
-                    print('Early termination: Energy change threshold reached.')
+                    if not self.params['silent']:
+                        print('Early termination: Energy change threshold reached.')
                 elif self.EAll[-1]/self.EAll[self.params['energy_fraction_from']] <= self.params['energy_fraction']:
-                    print('Early termination: Minimum fraction of initial energy reached.')
+                    if not self.params['silent']:
+                        print('Early termination: Minimum fraction of initial energy reached.')
                 
-                print('Total elapsed runtime: {:.2f} seconds.'.format(total_time))
+                if not self.params['silent']:
+                    print('Total elapsed runtime: {:.2f} seconds.'.format(total_time))
                 break
             
             del E, ER, EM
